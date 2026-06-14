@@ -21,17 +21,17 @@ func main() {
 	viper.SetConfigType("json")
 	viper.AddConfigPath("./config")
 	err := viper.ReadInConfig()
-	if err != nil { 
-		fmt.Println("ERROR READING THE VALUES FROM CONFIG FILE:", err)
-		os.Exit(1)
-	}
-
 	apiKey := viper.GetString("api_key")
-	// Allow environment variable override if the JSON value is placeholder or empty
+
+	// Allow environment variable override
 	if envKey := os.Getenv("GEMINI_API_KEY"); envKey != "" {
 		apiKey = envKey
-	} else if apiKey == "123APIKEY" || apiKey == "" {
-		fmt.Println("WARNING: Using placeholder or empty API Key. Set GEMINI_API_KEY environment variable if needed.")
+	}
+
+	if err != nil && apiKey == "" { 
+		fmt.Println("ERROR: Configuration file not found, and GEMINI_API_KEY is not set.")
+		fmt.Println("Please set GEMINI_API_KEY environment variable or create ./config/gitai.json")
+		os.Exit(1)
 	}
 
 	model := viper.GetString("model")
