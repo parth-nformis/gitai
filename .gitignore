@@ -1,0 +1,3 @@
+# Local config files containing secrets
+config/gitai.json
+config.env
