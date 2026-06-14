@@ -3,7 +3,11 @@
 # Exit on any error
 set -e
 
-echo "Installing GitAI..."
+if [ "$GITAI_UPDATE" = "true" ]; then
+    echo "Updating GitAI..."
+else
+    echo "Installing GitAI..."
+fi
 
 # Check if Go is installed
 if ! command -v go &> /dev/null; then
@@ -30,12 +34,18 @@ if sudo mv "$TEMP_BUILD_DIR/gitai" "$DEST_DIR/gitai"; then
     # Clean up the temp directory
     rm -rf "$TEMP_BUILD_DIR"
     echo "--------------------------------------------------------"
-    echo " GitAI installed successfully!"
+    if [ "$GITAI_UPDATE" = "true" ]; then
+        echo " GitAI updated successfully!"
+    else
+        echo " GitAI installed successfully!"
+    fi
     echo "--------------------------------------------------------"
-    echo "Usage:"
-    echo "  1. Set your API Key: export GEMINI_API_KEY=\"your-key\""
-    echo "  2. Run 'gitai -commitmsg' or 'gitai -commit' in any Git repo"
-    echo "--------------------------------------------------------"
+    if [ "$GITAI_UPDATE" != "true" ]; then
+        echo "Usage:"
+        echo "  1. Set your API Key: export GEMINI_API_KEY=\"your-key\""
+        echo "  2. Run 'gitai -commitmsg' or 'gitai -commit' in any Git repo"
+        echo "--------------------------------------------------------"
+    fi
 else
     # Clean up the temp directory
     rm -rf "$TEMP_BUILD_DIR"
