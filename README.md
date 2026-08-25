@@ -11,7 +11,7 @@ AI-assisted git commits and code reviews. Analyzes your staged changes and gener
 Run the install script to compile and place the binary in `/usr/local/bin`:
 
 ```bash
-bash <(curl -s https://raw.githubusercontent.com/parth-nformis/gitai/main/install.sh)
+bash <(curl -s https://raw.githubusercontent.com/parthdande/gitai/main/install.sh)
 ```
 
 The script clones the latest code, builds it in a temp directory, and moves the binary to `/usr/local/bin`. Your `~/.gitai/` config is preserved on subsequent runs.
@@ -19,7 +19,7 @@ The script clones the latest code, builds it in a temp directory, and moves the 
 ### Manual
 
 ```bash
-git clone https://github.com/parth-nformis/gitai.git
+git clone https://github.com/parthdande/gitai.git
 cd gitai
 go build -o gitai cmd/main.go
 sudo mv gitai /usr/local/bin/

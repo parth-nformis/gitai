@@ -32,7 +32,7 @@ func doUpdate() {
 	}
 
 	fmt.Println("Updating GitAI...")
-	scriptURL := "https://raw.githubusercontent.com/parth-nformis/gitai/main/install.sh"
+	scriptURL := "https://raw.githubusercontent.com/parthdande/gitai/main/install.sh"
 
 	resp, err := http.Get(scriptURL)
 	if err != nil {
