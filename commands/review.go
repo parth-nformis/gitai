@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/parthdande/gitai/client"
+	"github.com/parthdande/gitai/git"
 	"github.com/parthdande/gitai/prompts"
 )
 
@@ -12,6 +13,12 @@ import (
 type Review struct{}
 
 func (r *Review) Name() string { return "review" }
+
+// Diff stages all working tree changes and returns the staged diff, so the
+// review covers the entire working tree.
+func (r *Review) Diff(ctx context.Context) (string, error) {
+	return git.CommitAllDiff(ctx)
+}
 
 func (r *Review) Run(ctx context.Context, cli *client.Client, diff string, model string, thinking bool, configDir string) (string, error) {
 	// Load the system prompt from ~/.gitai/system_prompts/review.md (or use default).

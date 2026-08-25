@@ -13,7 +13,14 @@ import (
 // Each feature (commit, review, etc.) implements this interface.
 type Handler interface {
 	// Name returns the command name (e.g. "commit", "review").
+	// It doubles as the key for per-task config (<task>.model,
+	// <task>.thinking) and system prompt overrides (<task>.md).
 	Name() string
+
+	// Diff returns the git diff this feature operates on. Each handler
+	// declares its own diff source (staged-only, stage-all, branch diff),
+	// so callers never have to guess which diff a handler needs.
+	Diff(ctx context.Context) (string, error)
 
 	// Run executes the feature's workflow.
 	//

@@ -184,22 +184,34 @@ sudo gitai -uninstall
 
 ```
 gitai/
-├── cmd/main.go          # CLI flags, config loading, update/uninstall handlers
+├── cmd/                 # CLI entry point
+│   ├── main.go          # Flags, task dispatch, model resolution, auto-commit
+│   ├── update.go        # Self-update handler
+│   └── uninstall.go     # Uninstall handler
 ├── client/              # HTTP client for OpenAI-compatible APIs
 │   ├── client.go        # Client struct (api_base, api_key, model, http client)
 │   └── api_call.go      # API call logic, thinking mode, auto-fallback
-├── commands/            # Feature handlers (commit, review)
-│   ├── handler.go       # Handler interface (Name + Run)
+├── commands/            # Feature handlers (commit, review, pullreq)
+│   ├── handler.go       # Handler interface (Name + Diff + Run)
 │   ├── commit.go        # Commit message generation
-│   └── review.go        # Code review generation
-├── config/              # Typed config structs
-│   └── config.go        # Config and TaskConfig types
+│   ├── review.go        # Code review generation
+│   └── pullreq.go       # PR description generation
+├── config/              # Config loading (~/.gitai/gitai.json + env overrides)
+│   └── config.go        # Load() with validation
+├── git/                 # Git plumbing
+│   └── git.go           # Diff sources: StagedDiff, CommitAllDiff, BranchDiff
+├── diffprep/            # Diff filtering, stats, and chunking before the LLM call
+│   └── preprocess.go    # Noise filtering, truncation, hierarchical chunking
 ├── prompts/             # System prompts
 │   ├── loader.go        # Loads custom prompts from disk, falls back to defaults
 │   ├── commit.go        # Default commit system prompt
-│   └── review.go        # Default review system prompt
+│   ├── review.go        # Default review system prompt
+│   └── pullreq.go       # Default pullreq system prompt
 └── install.sh           # Automated install: clone, build, install to /usr/local/bin
 ```
+
+Adding a new feature = one `commands/<feature>.go` file (implement `Name`, `Diff`, `Run`),
+one default prompt in `prompts/`, and one flag in `cmd/main.go`.
 
 ## License
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/parthdande/gitai/client"
 	"github.com/parthdande/gitai/diffprep"
+	"github.com/parthdande/gitai/git"
 	"github.com/parthdande/gitai/prompts"
 )
 
@@ -19,6 +20,12 @@ import (
 type Commit struct{}
 
 func (c *Commit) Name() string { return "commit" }
+
+// Diff stages all working tree changes and returns the staged diff, so the
+// commit message covers everything, not just what is already staged.
+func (c *Commit) Diff(ctx context.Context) (string, error) {
+	return git.CommitAllDiff(ctx)
+}
 
 func (c *Commit) Run(ctx context.Context, cli *client.Client, diff string, model string, thinking bool, configDir string) (string, error) {
 	// Load the system prompt from ~/.gitai/system_prompts/commit.md (or use default).

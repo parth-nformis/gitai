@@ -18,50 +18,50 @@ import (
 
 // NoisePatterns are file patterns that should be excluded from diff analysis.
 var NoisePatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)\.lock$`),                  // package-lock.json, Gemfile.lock
-	regexp.MustCompile(`(?i)^node_modules/`),           // node_modules
-	regexp.MustCompile(`(?i)\.min\.(js|css)$`),         // minified files
-	regexp.MustCompile(`(?i)^vendor/`),                 // Go vendor dir
-	regexp.MustCompile(`(?i)\.pb\.go$`),                // protobuf generated
-	regexp.MustCompile(`(?i)\.generated\.`),             // auto-generated files
-	regexp.MustCompile(`(?i)\.svg$`),                   // SVGs (diff is noise)
-	regexp.MustCompile(`(?i)\.png$|\.jpg$|\.jpeg$`),    // images (binary)
-	regexp.MustCompile(`(?i)\.git/`),                   // git internals
-	regexp.MustCompile(`(?i)go\.sum$`),                 // Go dependency checksums
-	regexp.MustCompile(`(?i)yarn\.lock$`),              // yarn lockfile
-	regexp.MustCompile(`(?i)poetry\.lock$`),            // poetry lockfile
-	regexp.MustCompile(`(?i)Pipfile\.lock$`),           // pip lockfile
-	regexp.MustCompile(`(?i)\.bundle/`),                // bundler cache
-	regexp.MustCompile(`(?i)dist/`),                    // build output
-	regexp.MustCompile(`(?i)build/`),                   // build output
-	regexp.MustCompile(`(?i)\.next/`),                  // next.js build cache
-	regexp.MustCompile(`(?i)\.d\.ts$`),                 // TypeScript declaration files
-	regexp.MustCompile(`(?i)\.map$`),                   // source maps
+	regexp.MustCompile(`(?i)\.lock$`),               // package-lock.json, Gemfile.lock
+	regexp.MustCompile(`(?i)^node_modules/`),        // node_modules
+	regexp.MustCompile(`(?i)\.min\.(js|css)$`),      // minified files
+	regexp.MustCompile(`(?i)^vendor/`),              // Go vendor dir
+	regexp.MustCompile(`(?i)\.pb\.go$`),             // protobuf generated
+	regexp.MustCompile(`(?i)\.generated\.`),         // auto-generated files
+	regexp.MustCompile(`(?i)\.svg$`),                // SVGs (diff is noise)
+	regexp.MustCompile(`(?i)\.png$|\.jpg$|\.jpeg$`), // images (binary)
+	regexp.MustCompile(`(?i)\.git/`),                // git internals
+	regexp.MustCompile(`(?i)go\.sum$`),              // Go dependency checksums
+	regexp.MustCompile(`(?i)yarn\.lock$`),           // yarn lockfile
+	regexp.MustCompile(`(?i)poetry\.lock$`),         // poetry lockfile
+	regexp.MustCompile(`(?i)Pipfile\.lock$`),        // pip lockfile
+	regexp.MustCompile(`(?i)\.bundle/`),             // bundler cache
+	regexp.MustCompile(`(?i)dist/`),                 // build output
+	regexp.MustCompile(`(?i)build/`),                // build output
+	regexp.MustCompile(`(?i)\.next/`),               // next.js build cache
+	regexp.MustCompile(`(?i)\.d\.ts$`),              // TypeScript declaration files
+	regexp.MustCompile(`(?i)\.map$`),                // source maps
 }
 
 // FileStats tracks metadata about a single file in the diff.
 type FileStats struct {
-	Filename   string
-	IsNewFile   bool
-	IsDeleted   bool
-	IsRenamed   bool
-	Additions   int
-	Deletions   int
-	IsBinary    bool
-	IsNoise     bool
-	RawDiff     string
+	Filename  string
+	IsNewFile bool
+	IsDeleted bool
+	IsRenamed bool
+	Additions int
+	Deletions int
+	IsBinary  bool
+	IsNoise   bool
+	RawDiff   string
 }
 
 // PreparedDiff is the result of preprocessing a raw git diff.
 type PreparedDiff struct {
-	Files       []FileStats
-	TotalFiles  int
-	TotalAdded  int
-	TotalDeleted int
+	Files              []FileStats
+	TotalFiles         int
+	TotalAdded         int
+	TotalDeleted       int
 	TotalNoiseFiltered int
 	TotalBinarySkipped int
-	Summary     string // human-readable summary of the diff
-	Content     string // the actual diff content to send to the model
+	Summary            string // human-readable summary of the diff
+	Content            string // the actual diff content to send to the model
 }
 
 // Process takes a raw git diff string and returns a prepared, filtered diff.
@@ -146,8 +146,8 @@ func parseDiff(rawDiff string) []FileStats {
 // parseFileChunk extracts stats from a single file's diff chunk.
 func parseFileChunk(chunk, aPath, bPath string) FileStats {
 	fs := FileStats{
-		Filename:  normalizeFilename(aPath, bPath),
-		RawDiff:   chunk,
+		Filename: normalizeFilename(aPath, bPath),
+		RawDiff:  chunk,
 	}
 
 	// Detect file status from git headers
