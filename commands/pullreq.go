@@ -29,9 +29,9 @@ func (p *PullReq) Diff(ctx context.Context) (string, error) {
 	return git.BranchDiff(ctx, p.Base)
 }
 
-func (p *PullReq) Run(ctx context.Context, cli *client.Client, diff string, model string, thinking bool, configDir string) (string, error) {
+func (p *PullReq) Run(ctx context.Context, cli *client.Client, diff string, model string, thinking bool, reasoning string, configDir string) (string, error) {
 	systemPrompt := prompts.LoadSystemPrompt("pullreq", configDir)
 
 	prompt := fmt.Sprintf("Generate a PR description for these changes:\n\n%s", diff)
-	return cli.Generate(ctx, prompt, systemPrompt, model, thinking)
+	return cli.Generate(ctx, prompt, systemPrompt, model, thinking, reasoning)
 }

@@ -87,12 +87,13 @@ func (c *Client) httpClient() *http.Client {
 //   - ctx:        context for cancellation (e.g. Ctrl+C) and timeouts
 //   - model:      which model to use for this call (overrides client.Model if different)
 //   - thinking:   whether to enable extended thinking mode
+//   - reasoning: Muse Glimmer reasoning strength (low|medium|high|xhigh); empty means default
 //
 // If thinking is true and the API returns an error, Generate automatically
 // retries one time with thinking disabled and returns that result instead.
 // This way the user never sees a hard failure just because the model doesn't
 // support thinking mode.
-func (c *Client) Generate(ctx context.Context, prompt, systemPrompt, model string, thinking bool) (string, error) {
+func (c *Client) Generate(ctx context.Context, prompt, systemPrompt, model string, thinking bool, reasoning string) (string, error) {
 	if model == "" {
 		model = c.Model // fallback to client-level model
 	}
@@ -103,6 +104,20 @@ func (c *Client) Generate(ctx context.Context, prompt, systemPrompt, model strin
 		return "", fmt.Errorf("api_base is required (set api_base in config or API_BASE env var)")
 	}
 
+	// Model-specific handling for Muse Glimmer: reasoning strength is injected
+	// into the system prompt (the only control the model reads) and
+	// enable_thinking is never sent (always-on reasoning; the kwarg is a dead
+	// knob for it). The prompt is mutated here so both the primary call and
+	// the fallback retry below carry the same directive; for other models the
+	// reasoning value is deliberately ignored.
+	if IsMuseGlimmer(model) {
+		if thinking && reasoning == "" {
+			reasoning = "high"
+		}
+		thinking = false
+		systemPrompt, _ = withReasoningStrength(systemPrompt, reasoning)
+	}
+
 	// Estimate prompt size to provide better diagnostics
 	promptSize := len(prompt) + len(systemPrompt)
 
@@ -110,6 +125,8 @@ func (c *Client) Generate(ctx context.Context, prompt, systemPrompt, model strin
 	result, err := c.doGenerate(ctx, prompt, systemPrompt, model, thinking)
 
 	// If thinking was ON and it failed, retry silently with thinking OFF.
+	// For Muse Glimmer this gate never fires: thinking is forced to false
+	// above, so a muse error surfaces directly instead of burning a second call.
 	if err != nil && thinking {
 		fmt.Fprintf(os.Stderr, "Thinking mode failed (%v), falling back to non-thinking...\n", err)
 		return c.doGenerate(ctx, prompt, systemPrompt, model, false)

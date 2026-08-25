@@ -37,6 +37,7 @@ func main() {
 	updateFlag := flag.Bool("update", false, "Update gitai to the latest version")
 	uninstallFlag := flag.Bool("uninstall", false, "Uninstall gitai from the system")
 	thinkFlag := flag.Bool("think", false, "Enable extended thinking mode (overrides config)")
+	reasonFlag := flag.String("reason", "", "Muse Glimmer reasoning strength: low|medium|high|xhigh")
 	branchFlag := flag.String("branch", "main", "Base branch for PR diff (also -b)")
 	// -b is registered only so that passing it does not produce a
 	// "flag provided but not defined" error; the long form carries
@@ -56,7 +57,8 @@ Config (~/.gitai/gitai.json):
   {
     "api_base": "https://...",
     "api_key": "sk-...",
-    "commit": { "model": "...", "thinking": true },
+    "reasoning": "high",
+    "commit": { "model": "...", "thinking": true, "reasoning": "medium" },
     "review": { "model": "...", "thinking": false }
   }
 
@@ -96,15 +98,16 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 		return
 	}
 
-	// --- Pick the right model and thinking setting for this task ---
+	// --- Pick the right model, thinking, and reasoning for this task ---
 	// Priority (highest to lowest):
-	//   1. --think flag (only for thinking, not model)
-	//   2. gitai.json <task>.model and <task>.thinking
-	//   3. gitai.json model (or MODEL env var)
+	//   1. CLI flags (--think, --reason)
+	//   2. gitai.json <task>.model, <task>.thinking, <task>.reasoning
+	//   3. gitai.json model, reasoning (or MODEL env var)
 
 	taskName := handler.Name()
 	model := v.GetString("model")
-	thinking := *thinkFlag // --think flag is the lowest-level thinking default
+	thinking := *thinkFlag // flag is baseline; per-task config will override if set
+	reasoning := *reasonFlag
 
 	// Override with per-task config if set.
 	if taskModel := v.GetString(taskName + ".model"); taskModel != "" {
@@ -114,6 +117,26 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 		if tv, ok := v.Get(taskName + ".thinking").(bool); ok {
 			thinking = tv
 		}
+	}
+	if reasoning == "" {
+		if v.IsSet(taskName + ".reasoning") {
+			reasoning = v.GetString(taskName + ".reasoning")
+		} else if v.IsSet("reasoning") {
+			reasoning = v.GetString("reasoning")
+		}
+	}
+
+	// Validate reasoning strength if set.
+	if reasoning != "" {
+		if !reasoningValid(reasoning) {
+			fmt.Printf("ERROR: invalid reasoning strength '%s'. Must be one of: low, medium, high, xhigh\n", reasoning)
+			os.Exit(1)
+		}
+	}
+
+	// Model-aware notice: reasoning strength is only meaningful for Muse Glimmer.
+	if reasoning != "" && !client.IsMuseGlimmer(model) {
+		fmt.Fprintf(os.Stderr, "warning: reasoning strength '%s' is set but ignored for model '%s' (only Muse Glimmer uses it)\n", reasoning, model)
 	}
 
 	// --- Run the handler ---
@@ -126,7 +149,7 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 		Model:   model,
 	}
 
-	result, err := run(ctx, cli, handler, thinking, configDir)
+	result, err := run(ctx, cli, handler, thinking, reasoning, configDir)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
@@ -161,8 +184,8 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 //
 // Keeping the diff source inside each handler means main never has to
 // know the difference between a staged diff and a branch diff.
-func run(ctx context.Context, cli *client.Client, h commands.Handler, thinking bool, configDir string) (string, error) {
-	fmt.Printf("Running '%s' (model=%s, thinking=%v)...\n", h.Name(), cli.Model, thinking)
+func run(ctx context.Context, cli *client.Client, h commands.Handler, thinking bool, reasoning string, configDir string) (string, error) {
+	fmt.Printf("Running '%s' (model=%s, thinking=%v, reasoning=%s)...\n", h.Name(), cli.Model, thinking, reasoning)
 
 	diff, err := h.Diff(ctx)
 	if err != nil {
@@ -172,7 +195,15 @@ func run(ctx context.Context, cli *client.Client, h commands.Handler, thinking b
 		return "", fmt.Errorf("no changes detected - working tree is clean")
 	}
 
-	return h.Run(ctx, cli, diff, cli.Model, thinking, configDir)
+	return h.Run(ctx, cli, diff, cli.Model, thinking, reasoning, configDir)
+}
+
+func reasoningValid(s string) bool {
+	switch s {
+	case "low", "medium", "high", "xhigh":
+		return true
+	}
+	return false
 }
 
 // sanitizeForGit prepares raw model output for use as a commit message.

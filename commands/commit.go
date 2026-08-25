@@ -39,7 +39,7 @@ func (c *Commit) Diff(ctx context.Context) (string, error) {
 	return git.CommitAllDiff(ctx)
 }
 
-func (c *Commit) Run(ctx context.Context, cli *client.Client, diff string, model string, thinking bool, configDir string) (string, error) {
+func (c *Commit) Run(ctx context.Context, cli *client.Client, diff string, model string, thinking bool, reasoning string, configDir string) (string, error) {
 	// Load the system prompt from ~/.gitai/system_prompts/commit.md (or use default).
 	systemPrompt := prompts.LoadSystemPrompt("commit", configDir)
 
@@ -48,18 +48,18 @@ func (c *Commit) Run(ctx context.Context, cli *client.Client, diff string, model
 
 	// Decide: single call or hierarchical chunking?
 	if diffprep.ShouldChunk(diff) {
-		return c.runHierarchical(ctx, cli, diff, prepared, model, thinking, systemPrompt)
+		return c.runHierarchical(ctx, cli, diff, prepared, model, thinking, reasoning, systemPrompt)
 	}
 
 	// Small diff — send everything in one shot.
 	prompt := fmt.Sprintf("Analyze this git diff and write a commit message:\n\n%s", prepared.Content)
-	return cli.Generate(ctx, prompt, systemPrompt, model, thinking)
+	return cli.Generate(ctx, prompt, systemPrompt, model, thinking, reasoning)
 }
 
 // runHierarchical uses a two-stage pipeline for large diffs:
 // Stage 1: Summarize each chunk independently
 // Stage 2: Synthesize all summaries into the final commit message
-func (c *Commit) runHierarchical(ctx context.Context, cli *client.Client, rawDiff string, prepared *diffprep.PreparedDiff, model string, thinking bool, systemPrompt string) (string, error) {
+func (c *Commit) runHierarchical(ctx context.Context, cli *client.Client, rawDiff string, prepared *diffprep.PreparedDiff, model string, thinking bool, reasoning string, systemPrompt string) (string, error) {
 	// 300 lines per chunk is the balance: small enough that each
 	// summary fits easily in context, large enough that the number of
 	// chunks (and therefore API calls) stays low.
@@ -80,13 +80,14 @@ func (c *Commit) runHierarchical(ctx context.Context, cli *client.Client, rawDif
 			i+1, len(chunks), chunkFileNames, chunkDiff,
 		)
 
-		// Stage 1 calls run with thinking OFF: chunk summarization is
+		// Stage 1 calls run with thinking OFF and reasoning OFF: chunk summarization is
 		// a short, mechanical task, and enabling extended thinking
 		// here would multiply latency and cost across every chunk for
 		// no visible quality gain. The user's thinking choice is
 		// honored on the stage-2 synthesis call, which is where the
-		// actual message is written.
-		summary, err := cli.Generate(ctx, prompt, stage1Prompt, model, false)
+		// actual message is written. Muse Glimmer reasons unconditionally
+		// regardless, so the only mitigation for large diffs is -reason low.
+		summary, err := cli.Generate(ctx, prompt, stage1Prompt, model, false, "")
 		if err != nil {
 			return "", fmt.Errorf("chunk summarization failed for chunk %d: %w", i+1, err)
 		}
@@ -103,7 +104,7 @@ func (c *Commit) runHierarchical(ctx context.Context, cli *client.Client, rawDif
 		prepared.Summary,
 	)
 
-	return cli.Generate(ctx, synthesisPrompt, systemPrompt, model, thinking)
+	return cli.Generate(ctx, synthesisPrompt, systemPrompt, model, thinking, reasoning)
 }
 
 func chunkFileNames(files []diffprep.FileStats) string {

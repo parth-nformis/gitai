@@ -29,10 +29,10 @@ func (r *Review) Diff(ctx context.Context) (string, error) {
 	return git.CommitAllDiff(ctx)
 }
 
-func (r *Review) Run(ctx context.Context, cli *client.Client, diff string, model string, thinking bool, configDir string) (string, error) {
+func (r *Review) Run(ctx context.Context, cli *client.Client, diff string, model string, thinking bool, reasoning string, configDir string) (string, error) {
 	// Load the system prompt from ~/.gitai/system_prompts/review.md (or use default).
 	systemPrompt := prompts.LoadSystemPrompt("review", configDir)
 
 	prompt := fmt.Sprintf("Review this git diff for security vulnerabilities, code quality, and best practices:\n\n%s", diff)
-	return cli.Generate(ctx, prompt, systemPrompt, model, thinking)
+	return cli.Generate(ctx, prompt, systemPrompt, model, thinking, reasoning)
 }

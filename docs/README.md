@@ -16,6 +16,7 @@ labeled with the Go function that implements it.
 | [pull-request.md](pull-request.md) | PR description flow (branch diff) |
 | [diff-preprocessing.md](diff-preprocessing.md) | How raw diffs are cleaned before the model sees them |
 | [api-client.md](api-client.md) | The API client: streaming, thinking mode, fallbacks, error handling |
+| [reasoning.md](reasoning.md) | Muse Glimmer reasoning mode: the strength dial, model matching, CoT handling |
 | [configuration.md](configuration.md) | Config file, environment variables, priority rules, custom prompts |
 | [extending.md](extending.md) | How to add a new gitai feature (3 touch points) |
 | [prepare-commit-msg-hook.md](prepare-commit-msg-hook.md) | Design for the upcoming auto-commit-message git hook |

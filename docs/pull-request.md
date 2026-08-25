@@ -15,7 +15,7 @@ changes would describe the wrong thing. So:
 flowchart LR
     A["git.BranchDiff(ctx, base)<br/>= git diff <base>"] --> B["branch vs working tree:<br/>committed + uncommitted changes"]
     B --> C["raw diff — NOT diffprep-cleaned"]
-    C --> D["client.Generate × 1<br/>thinking = user setting"]
+    C --> D["client.Generate × 1<br/>thinking + reasoning = user setting"]
     D --> E["PR description"]
 ```
 

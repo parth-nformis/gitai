@@ -23,8 +23,8 @@ func (f *MyFeature) Name() string { return "myfeature" }
 ```
 
 `Name()` is load-bearing, not decorative — it is the key for
-`<task>.model`, `<task>.thinking`, and the `system_prompts/<task>.md`
-override. Name it accordingly.
+`<task>.model`, `<task>.thinking`, `<task>.reasoning`, and the
+`system_prompts/<task>.md` override. Name it accordingly.
 
 ```go
 // Choose the diff source from the git package:
@@ -39,10 +39,11 @@ from a git hook or anywhere the user's index must stay untouched.
 
 ```go
 func (f *MyFeature) Run(ctx context.Context, cli *client.Client,
-    diff string, model string, thinking bool, configDir string) (string, error) {
+    diff string, model string, thinking bool, reasoning string,
+    configDir string) (string, error) {
     systemPrompt := prompts.LoadSystemPrompt("myfeature", configDir)
     prompt := fmt.Sprintf("Do the thing:\n\n%s", diff)
-    return cli.Generate(ctx, prompt, systemPrompt, model, thinking)
+    return cli.Generate(ctx, prompt, systemPrompt, model, thinking, reasoning)
 }
 ```
 

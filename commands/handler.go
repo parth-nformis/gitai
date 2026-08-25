@@ -29,8 +29,9 @@ type Handler interface {
 	//   - diff:      the staged git diff to analyze
 	//   - model:     which model to use for this call (may override client.Model)
 	//   - thinking:  whether to enable extended thinking mode
+	//   - reasoning: Muse Glimmer reasoning strength (low|medium|high|xhigh); empty means default
 	//   - configDir: path to ~/.gitai (used to find system prompt files)
 	//
 	// Returns the AI's response text and any error.
-	Run(ctx context.Context, cli *client.Client, diff string, model string, thinking bool, configDir string) (string, error)
+	Run(ctx context.Context, cli *client.Client, diff string, model string, thinking bool, reasoning string, configDir string) (string, error)
 }

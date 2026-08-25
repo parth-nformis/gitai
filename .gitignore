@@ -2,6 +2,8 @@
 config/gitai.json
 config.env
 gitai
+# Task/scratch notes (not part of the tool)
+tasks/
 .pi/
 .agent/
 .context/

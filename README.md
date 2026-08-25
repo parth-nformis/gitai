@@ -56,7 +56,7 @@ Created automatically at `~/.gitai/gitai.json` on first install:
 }
 ```
 
-### Per-task Model and Thinking Mode
+### Per-task Model, Thinking, and Reasoning
 
 Use different models for commit messages vs code reviews:
 
@@ -70,10 +70,13 @@ Use different models for commit messages vs code reviews:
 ```
 
 Priority (highest to lowest):
-1. `--think` CLI flag (thinking only)
-2. Per-task config (`commit.model`, `commit.thinking`, `review.model`, `review.thinking`)
-3. Global config (`model` key)
+1. `--reason` CLI flag (reasoning only)
+2. Per-task config (`commit.model`, `commit.thinking`, `commit.reasoning`, `review.model`, ...)
+3. Global config (`model`, `reasoning`)
 4. Environment variables (`MODEL`, `API_BASE`, `API_KEY`)
+
+Note: for thinking, a per-task `<task>.thinking` value overrides the
+`--think` flag when both are present.
 
 ### Example Configurations
 
@@ -150,6 +153,33 @@ Or enable permanently in `~/.gitai/gitai.json`:
 }
 ```
 
+### Reasoning Mode (Muse Glimmer)
+
+Muse Glimmer is an always-on reasoning model: it cannot be switched
+off, only tuned. `-reason` sets the reasoning strength
+(`low | medium | high | xhigh`) and gitai injects it into the system
+prompt; it also stops sending the `enable_thinking` kwarg that the
+model ignores. On any other model, `-reason` prints a one-time warning
+and is ignored:
+
+```bash
+gitai -commitmsg -reason low
+```
+
+Or permanently in `~/.gitai/gitai.json`:
+
+```json
+{
+  "model": "Meta/Muse-Glimmer-30B",
+  "reasoning": "medium",
+  "commit": { "reasoning": "low" }
+}
+```
+
+For best results serve Muse Glimmer with `--reasoning-parser
+muse_glimmer` (vLLM) so the private chain of thought stays out of the
+output.
+
 ### Custom System Prompts
 
 Override the built-in prompts by placing `.md` files in `~/.gitai/system_prompts/`:
@@ -196,7 +226,8 @@ gitai/
 │   └── uninstall.go     # Uninstall handler
 ├── client/              # HTTP client for OpenAI-compatible APIs
 │   ├── client.go        # Client struct (api_base, api_key, model, http client)
-│   └── api_call.go      # API call logic, thinking mode, auto-fallback
+│   ├── api_call.go      # API call logic, thinking + reasoning mode, auto-fallback
+│   └── reasoning.go     # Muse Glimmer: model matching + strength injection
 ├── commands/            # Feature handlers (commit, review, pullreq)
 │   ├── handler.go       # Handler interface (Name + Diff + Run)
 │   ├── commit.go        # Commit message generation

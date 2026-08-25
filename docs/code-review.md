@@ -9,7 +9,7 @@ Handler: `commands/review.go` (`Review`).
 ```mermaid
 flowchart LR
     A["git.CommitAllDiff<br/>(stage all, read staged diff)"] --> B["raw diff — NOT diffprep-cleaned"]
-    B --> C["client.Generate × 1<br/>thinking = user setting"]
+    B --> C["client.Generate × 1<br/>thinking + reasoning = user setting"]
     C --> D["structured review"]
 ```
 

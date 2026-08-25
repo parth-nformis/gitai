@@ -8,7 +8,8 @@ provider contract.
 
 | Method | File | Job |
 |---|---|---|
-| `Client.Generate` | `client/api_call.go` | The only entry point: one chat completion with model + thinking params, fallbacks included |
+| `Client.Generate` | `client/api_call.go` | The only entry point: one chat completion with model + thinking + reasoning params, fallbacks included |
+| `IsMuseGlimmer`, `withReasoningStrength` | `client/reasoning.go` | Muse Glimmer detection + system-prompt strength injection (pure string logic, no HTTP) |
 
 Everything else (`doGenerate`, `doStreamedRequest`,
 `doNonStreamedRequest`, `buildURL`, ...) is internal.
@@ -17,7 +18,7 @@ Everything else (`doGenerate`, `doStreamedRequest`,
 
 ```mermaid
 flowchart TD
-    A["Generate(ctx, prompt, systemPrompt, model, thinking)"] --> B["doGenerate: stream=true"]
+    A["Generate(ctx, prompt, systemPrompt, model, thinking, reasoning)"] --> B["doGenerate: stream=true"]
     B -->|SSE succeeds| R["result"]
     B -->|streaming unsupported| C["retry with stream=false"]
     C --> R
@@ -35,6 +36,10 @@ Reasons for each fallback:
   `chat_template_kwargs` (a vLLM-style, non-standard field). If a
   server rejects it, the retry with thinking off means the user never
   sees a hard failure just because their model lacks the feature.
+- **Never fires for Muse Glimmer.** `Generate` forces `thinking = false`
+  for muse (always-on reasoning — the kwarg is a dead knob for it), so
+  the `err != nil && thinking` gate cannot trip: a muse error surfaces
+  directly instead of burning a second call.
 
 ## Thinking mode — how it reaches the model
 
@@ -45,6 +50,33 @@ chat_template_kwargs: { "enable_thinking": true }
 Sent only when thinking is on. The field is a pointer with `omitempty`
 so that when thinking is off the key is **absent from the JSON** —
 strict providers reject unknown keys, and "send null" is not an option.
+For Muse Glimmer this field is never sent at all (see below).
+
+## Reasoning mode (Muse Glimmer)
+
+Muse Glimmer is an always-on reasoning model: `enable_thinking` and
+top-level `reasoning_effort` are dead knobs its template never reads.
+What `Generate` does instead (`client/reasoning.go` + `client/api_call.go`):
+
+- Detects muse per call with `IsMuseGlimmer` (case-insensitive
+  `muse-glimmer` substring — matches `muse-glimmer:30b`,
+  `Meta/Muse-Glimmer-30B`, ...). Per call, not per client, because
+  per-task model overrides can change the model mid-run.
+- Appends `Reasoning strength: <level>` to the system prompt
+  (`withReasoningStrength`). The system-prompt line is the control
+  Meta's own serving docs prescribe, and it works on any
+  OpenAI-compatible server; the `chat_template_kwargs.reasoning_strength`
+  jinja variable only reaches the template on vLLM-family servers, and
+  gitai stays provider-agnostic.
+- Forces `thinking = false`, so `enable_thinking` is never sent to muse
+  and the thinking fallback above never fires for it.
+- `-think` with no explicit strength maps to `high`.
+- If the prompt already contains a `Reasoning strength:` line
+  (case-insensitive) — e.g. in a custom `system_prompts/commit.md` —
+  the user's line wins and nothing is appended.
+
+Full picture (CoT routing, server flags, hierarchical-path caveats):
+[reasoning.md](reasoning.md).
 
 ## Streaming wire format
 

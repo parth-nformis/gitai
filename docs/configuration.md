@@ -10,7 +10,7 @@ All resolution happens in one place: `config.Load()`
 | Config file | `~/.gitai/gitai.json` | Created on first install |
 | Env vars | `API_BASE`, `API_KEY`, `MODEL` | Supported names |
 | Legacy env vars | `GEMINI_API_BASE`, `GEMINI_API_KEY` | Kept for backward compatibility only |
-| CLI flags | `--think`, `--branch` | Per-invocation overrides |
+| CLI flags | `--think`, `--reason`, `--branch` | Per-invocation overrides |
 
 ## Precedence rules
 
@@ -19,12 +19,13 @@ All resolution happens in one place: `config.Load()`
 | `api_base` / `api_key` | config file wins; env vars only fill in when the file has no value | A team's committed config stays stable even on machines with env vars set for other tools |
 | model (global) | `MODEL` env var always overrides the config file | "Try a different model once" needs no config edit |
 | per-task model | `<task>.model` in the config file | Lets commit use a small fast model and review use a strong one |
-| thinking | `--think` flag > `<task>.thinking` > (no default: off) | The flag is the loudest, most deliberate signal |
+| thinking | `--think` seeds the value; `<task>.thinking` wins if set (default: off) | Per-task config is the persistent, task-specific setting; the flag covers "just this run" when no per-task value exists |
+| reasoning | `--reason` > `<task>.reasoning` > top-level `reasoning` > unset | The flag is a deliberate per-invocation choice and must beat the file; Muse Glimmer only |
 
 Per-task keys are looked up generically (`<task>.model`,
-`<task>.thinking`) — adding a new task needs **no change** to
-`config.Load`, which is why the config file is the extensibility point
-([extending.md](extending.md)).
+`<task>.thinking`, `<task>.reasoning`) — adding a new task needs
+**no change** to `config.Load`, which is why the config file is the
+extensibility point ([extending.md](extending.md)).
 
 ## Example config
 
@@ -35,6 +36,17 @@ Per-task keys are looked up generically (`<task>.model`,
   "model": "Qwen/Qwen3-32B",
   "commit":  { "model": "qwen3-8b",   "thinking": false },
   "review":  { "model": "qwen3-32b", "thinking": true }
+}
+```
+
+Muse Glimmer uses a reasoning strength instead of a thinking toggle:
+
+```json
+{
+  "api_base": "http://localhost:8000/v1",
+  "model": "Meta/Muse-Glimmer-30B",
+  "reasoning": "medium",
+  "commit": { "reasoning": "low" }
 }
 ```
 

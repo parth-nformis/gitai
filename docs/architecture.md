@@ -59,20 +59,26 @@ Notes on the path:
 - **Step E may run multiple times** for large diffs (hierarchical
   summarization — see [commit-message.md](commit-message.md)).
 
-## Model and thinking resolution
+## Model, thinking, and reasoning resolution
 
 Done once in `cmd/main.go` after config loads, before any handler runs:
 
 ```mermaid
 flowchart LR
-    F["--think flag"] --> R["final thinking value"]
-    T["config: <task>.thinking"] --> R
+    F["--think flag"] --> RT["final thinking<br/>(<task>.thinking wins if set)"]
+    T["config: <task>.thinking"] --> RT
+    RF["--reason flag"] --> RS["final reasoning<br/>(flag wins)"]
+    RTK["config: <task>.reasoning"] --> RS
+    RG["config: reasoning"] --> RS
     M["config: <task>.model"] --> MR["final model"]
     G["config: model (or MODEL env)"] --> MR
 ```
 
 Priority, highest wins: per-task config → global config → environment.
-The `--think` flag overrides thinking only; it never changes the model.
+Thinking: the `--think` flag seeds the value; a per-task
+`<task>.thinking` overrides it when set. Reasoning: the `--reason`
+flag wins; otherwise `<task>.reasoning`, then top-level `reasoning`,
+then unset. Neither flag ever changes the model.
 
 See [configuration.md](configuration.md) for the full rules.
 
