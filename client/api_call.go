@@ -14,24 +14,40 @@ import (
 )
 
 // defaultHTTPTimeout is the maximum time an API call is allowed to take.
+// Large diffs on local models can be slow, so this is generous; a hung
+// server should still not block a terminal forever.
 const defaultHTTPTimeout = 120 * time.Second
 
-// chatCompletionRequest mirrors the OpenAI chat completions request body.
+// chatCompletionRequest mirrors the OpenAI /chat/completions request body.
+// Only the fields gitai needs are declared — extra response fields are
+// simply ignored by encoding/json.
 type chatCompletionRequest struct {
-	Model              string        `json:"model"`
-	Messages           []chatMessage `json:"messages"`
-	Stream             bool          `json:"stream"`
+	Model    string        `json:"model"`
+	Messages []chatMessage `json:"messages"`
+	// Stream selects SSE delivery. We always try streaming first and
+	// fall back to a normal response (see doGenerate).
+	Stream bool `json:"stream"`
+
+	// ChatTemplateKwargs passes options straight through to the chat
+	// template on vLLM-style servers. It is a *pointer* with omitempty
+	// so that when thinking is off the field is omitted entirely —
+	// strict providers reject unknown top-level keys, so "send it as
+	// null" is not an option; the key must not exist at all.
 	ChatTemplateKwargs *struct {
 		EnableThinking bool `json:"enable_thinking"`
 	} `json:"chat_template_kwargs,omitempty"`
 }
 
+// chatMessage is one entry in the conversation. Roles are the OpenAI
+// convention: "system" (behavior instructions) then "user" (the actual
+// input).
 type chatMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-// chatCompletionResponse mirrors the relevant parts of the API response.
+// chatCompletionResponse mirrors the relevant parts of a non-streamed
+// API response.
 type chatCompletionResponse struct {
 	Choices []struct {
 		Message struct {
@@ -40,18 +56,23 @@ type chatCompletionResponse struct {
 	} `json:"choices"`
 }
 
-// streamChunk mirrors a single SSE chunk from a streaming response.
+// streamChunk mirrors a single SSE event from a streaming response.
+// Unlike the non-streamed shape, the text arrives incrementally in
+// "delta" — each event carries the next fragment of the answer.
 type streamChunk struct {
 	Choices []struct {
 		Delta struct {
 			Content string `json:"content"`
 		} `json:"delta"`
+		// FinishReason (e.g. "stop", "length") tells us why the
+		// model stopped; read but not acted on.
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 }
 
 // httpClient returns the HTTP client to use for API calls.
-// Reuses the embedded client if set, otherwise creates one with a default timeout.
+// Reuses the embedded client if set, otherwise lazily creates one with
+// the default timeout.
 func (c *Client) httpClient() *http.Client {
 	if c.HTTPClient != nil {
 		return c.HTTPClient
@@ -121,7 +142,13 @@ func (c *Client) Generate(ctx context.Context, prompt, systemPrompt, model strin
 }
 
 // doGenerate performs a single API call (no fallback logic).
-// Attempts streaming first, falls back to non-streaming if streaming fails.
+//
+// It attempts streaming first and falls back to non-streaming if
+// streaming fails. The reason for this order: streaming gives the user
+// live feedback on long generations and avoids the "is it still
+// working?" problem on slow local models, but not every
+// OpenAI-compatible server supports it (some return an error for
+// stream:true), so the non-streamed path must remain available.
 func (c *Client) doGenerate(ctx context.Context, prompt, systemPrompt, model string, thinking bool) (string, error) {
 	baseURL := c.buildURL()
 	url := baseURL + "chat/completions"
@@ -159,6 +186,12 @@ func (c *Client) doGenerate(ctx context.Context, prompt, systemPrompt, model str
 }
 
 // buildURL normalizes the API base URL.
+//
+// Users commonly write the base URL without a trailing slash or without
+// the /v1 segment (e.g. "http://localhost:8000"). The OpenAI-compatible
+// chat endpoint lives at <base>/v1/chat/completions, so buildURL makes
+// sure both the trailing slash and the /v1 segment are present exactly
+// once, regardless of how the URL was typed.
 func (c *Client) buildURL() string {
 	baseURL := c.APIBase
 	if baseURL[len(baseURL)-1] != '/' {
@@ -180,7 +213,15 @@ func (c *Client) buildMessages(prompt, systemPrompt string) []chatMessage {
 	return messages
 }
 
-// buildTemplateKwargs returns the thinking mode kwargs or nil.
+// buildTemplateKwargs returns the thinking mode kwargs, or nil to omit
+// the field from the JSON payload.
+//
+// Thinking mode is exposed to the model through the chat template
+// (vLLM-style servers read chat_template_kwargs.enable_thinking). It is
+// not a standard OpenAI field, so it must only be sent to servers that
+// understand it — returning nil keeps it out of the request for
+// everything else. The auto-fallback in Generate handles servers that
+// reject it.
 func (c *Client) buildTemplateKwargs(thinking bool) *struct {
 	EnableThinking bool `json:"enable_thinking"`
 } {
@@ -218,35 +259,44 @@ func (c *Client) doStreamedRequest(ctx context.Context, url string, body []byte)
 		return "", fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	// Read SSE stream
+	// Read the SSE stream line by line. The wire format is plain text:
+	// each event is a "data: <json>" line, terminated by a
+	// "data: [DONE]" line.
 	var result strings.Builder
 	scanner := bufio.NewScanner(resp.Body)
 
-	// Increase buffer size for large tokens (default is 64KB, we need more)
+	// Grow the scanner buffer well beyond the 64KB default: a single
+	// event for a long token line can exceed it, and bufio silently
+	// errors out on over-long lines otherwise.
 	scanner.Buffer(make([]byte, 0, 256*1024), 1024*1024)
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// SSE lines start with "data: "
+		// SSE frames can carry comments, heartbeats, and other
+		// non-data lines — only "data: " lines contain payload, so
+		// everything else is skipped.
 		if !strings.HasPrefix(line, "data: ") {
 			continue
 		}
 
 		data := strings.TrimPrefix(line, "data: ")
 
-		// End of stream marker
+		// "[DONE]" is the standard sentinel marking end of stream.
 		if data == "[DONE]" {
 			break
 		}
 
-		// Parse the JSON chunk
+		// Parse the JSON chunk. Malformed chunks are skipped rather
+		// than failing the whole call — a single bad event should not
+		// discard a long, otherwise-successful generation.
 		var chunk streamChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
-			continue // Skip malformed chunks
+			continue
 		}
 
-		// Extract and accumulate content
+		// Each event carries a delta (the next slice of text);
+		// accumulate all slices in order to reconstruct the answer.
 		for _, choice := range chunk.Choices {
 			if choice.Delta.Content != "" {
 				result.WriteString(choice.Delta.Content)
@@ -310,7 +360,14 @@ func (c *Client) doNonStreamedRequest(ctx context.Context, url string, body []by
 	return result.Choices[0].Message.Content, nil
 }
 
-// isContextLengthError checks if the error is related to exceeding context limits.
+// isContextLengthError heuristically checks if the error is related to
+// exceeding the model's context limits.
+//
+// OpenAI-compatible servers do not share a stable machine-readable error
+// code for this case, so we pattern-match the phrases they actually emit
+// ("context length", "max_tokens", "too long", ...). Matching on text is
+// deliberately loose: a false positive only changes the wording of the
+// error message, it never changes what happens.
 func isContextLengthError(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "context") && strings.Contains(msg, "length") ||
@@ -320,7 +377,9 @@ func isContextLengthError(err error) bool {
 		strings.Contains(msg, "too long")
 }
 
-// isTimeoutError checks if the error is a timeout.
+// isTimeoutError checks if the error is a timeout, whether it came from
+// our own client deadline or from the server. Same loose text-matching
+// approach as isContextLengthError — see that function's comment.
 func isTimeoutError(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "timeout") ||

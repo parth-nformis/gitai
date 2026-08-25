@@ -9,16 +9,23 @@ import (
 	"os/exec"
 )
 
-// doUpdate downloads and runs install.sh with GITAI_UPDATE=true,
-// replacing the current binary while preserving ~/.gitai/ config.
+// doUpdate downloads install.sh from the repository and runs it with
+// GITAI_UPDATE=true, which tells the script to rebuild the binary in
+// place and swap it over the running one. ~/.gitai/ (config, prompts)
+// lives outside the binary and is preserved.
+//
+// The script is piped into `bash -` rather than saved to a temp file
+// so nothing is left on disk and the script cannot be tampered with
+// between download and execution.
 func doUpdate() {
-	// Check if Go is installed (required by install.sh).
+	// Fail fast on missing dependencies: install.sh shells out to go
+	// and curl, and a late failure in the middle of an update is
+	// confusing — better to tell the user up front what to install.
 	if _, err := exec.LookPath("go"); err != nil {
 		fmt.Println("Error: Go is not installed. Please install Go (https://go.dev/).")
 		os.Exit(1)
 	}
 
-	// Check if curl is installed.
 	if _, err := exec.LookPath("curl"); err != nil {
 		fmt.Println("Error: curl is not installed. Please install curl (https://curl.se/).")
 		os.Exit(1)

@@ -1,7 +1,17 @@
 package prompts
 
-// DefaultCommitSystem returns the built-in default system prompt for generating
-// conventional commit messages. Used as a fallback when no custom prompt file exists.
+// DefaultCommitSystem returns the built-in default system prompt for
+// generating conventional commit messages. Used as a fallback when no
+// custom prompt file exists.
+//
+// Two requirements in the prompt are deliberate constraints on the
+// model rather than style preferences:
+//
+//   - "conventional commit" header (feat:/fix:/chore: ...) keeps
+//     `git log` scannable and machine-parseable by tooling.
+//   - "no markdown / no backticks" because the output is passed
+//     verbatim to `git commit -m`; fences or code ticks would be
+//     baked into the commit message permanently.
 func DefaultCommitSystem() string {
 	return "You are an expert software engineer. Generate a structured conventional commit message based on the provided git diff. It must start with a short header line (conventional commit style) summarizing the overall change, followed by a blank line, then a brief paragraph describing the purpose of the changes, focusing on the impact and user-facing behavior, followed by another blank line, and a bulleted list detailing what the changes accomplished (focusing on logical and functional changes rather than listing file names). Do not include markdown formatting (like ```), just return the raw text also do not use ` or \"`\" marks in commit message ."
 }

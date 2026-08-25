@@ -180,6 +180,12 @@ sudo gitai -uninstall
 
 ---
 
+## Documentation
+
+In-depth documentation with diagrams lives in [`docs/`](docs/README.md) —
+architecture, per-feature flows, diff preprocessing, the API client,
+configuration, and how to extend gitai with new features.
+
 ## Architecture
 
 ```

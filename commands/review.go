@@ -9,7 +9,16 @@ import (
 	"github.com/parthdande/gitai/prompts"
 )
 
-// Review implements the code review workflow (security, quality, best practices).
+// Review implements the code review workflow (security, quality,
+// best practices).
+//
+// Unlike Commit, Review sends the raw diff in a single call: a review
+// needs to see actual code lines to point at problems, so the
+// hierarchical chunking that commit uses for very large diffs does not
+// apply here. The review prompt (see prompts.DefaultReviewSystem)
+// forces a fixed output structure — verdict, then SECURITY / QUALITY /
+// BEST PRACTICES sections — so results are easy to scan and, if ever
+// needed, parse.
 type Review struct{}
 
 func (r *Review) Name() string { return "review" }

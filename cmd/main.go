@@ -15,8 +15,16 @@ import (
 )
 
 const (
-	maxCommitMsgLen = 7200            // Git's soft limit for commit message size
-	gitTimeout      = 5 * time.Minute // Long diffs + slow models need headroom
+	// maxCommitMsgLen caps generated commit messages. Git itself does
+	// not hard-limit commit message size, but anything beyond a few KB
+	// is almost certainly a model runaway and useless in `git log`, so
+	// we truncate well short of where messages become unmanageable.
+	maxCommitMsgLen = 7200
+
+	// gitTimeout bounds the whole run (diff fetch + every API call).
+	// Hierarchical summarization makes multiple calls for large diffs
+	// and local models can be slow, so this needs real headroom.
+	gitTimeout = 5 * time.Minute
 )
 
 func main() {
@@ -30,6 +38,9 @@ func main() {
 	uninstallFlag := flag.Bool("uninstall", false, "Uninstall gitai from the system")
 	thinkFlag := flag.Bool("think", false, "Enable extended thinking mode (overrides config)")
 	branchFlag := flag.String("branch", "main", "Base branch for PR diff (also -b)")
+	// -b is registered only so that passing it does not produce a
+	// "flag provided but not defined" error; the long form carries
+	// the value, so this result is intentionally discarded.
 	_ = flag.String("b", "main", "Short alias for --branch")
 
 	flag.Usage = func() {
@@ -142,8 +153,14 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 	}
 }
 
-// run fetches the diff declared by the handler and executes the handler
-// against it.
+// run is the shared pipeline for every AI task:
+//
+//  1. ask the handler which diff it operates on (h.Diff),
+//  2. refuse to run when there is nothing to analyze,
+//  3. hand the diff to the handler (h.Run) and return its output.
+//
+// Keeping the diff source inside each handler means main never has to
+// know the difference between a staged diff and a branch diff.
 func run(ctx context.Context, cli *client.Client, h commands.Handler, thinking bool, configDir string) (string, error) {
 	fmt.Printf("Running '%s' (model=%s, thinking=%v)...\n", h.Name(), cli.Model, thinking)
 
@@ -158,8 +175,13 @@ func run(ctx context.Context, cli *client.Client, h commands.Handler, thinking b
 	return h.Run(ctx, cli, diff, cli.Model, thinking, configDir)
 }
 
-// sanitizeForGit strips control characters and truncates AI output
-// for safe use in git commit messages.
+// sanitizeForGit prepares raw model output for use as a commit message.
+//
+// Models occasionally emit control characters (unicode escapes, stray
+// ANSI codes, null bytes) that are legal in a string but wrong inside
+// a commit message — `git log` output gets mangled and some git tools
+// reject such messages outright. We keep only printable ASCII plus the
+// line break characters, then trim and truncate to maxCommitMsgLen.
 func sanitizeForGit(s string) string {
 	var b strings.Builder
 	for _, r := range s {

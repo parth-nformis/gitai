@@ -10,8 +10,14 @@ import (
 )
 
 // PullReq implements the PR description generation workflow.
+//
+// Its diff source is different from commit/review: instead of the
+// staged snapshot, it diffs the whole branch (committed and uncommitted
+// changes) against Base, because a PR description has to describe
+// everything the PR will contain — most of which is already committed.
 type PullReq struct {
-	// Base is the base branch to diff against.
+	// Base is the base branch to diff against (e.g. "main"). Set by
+	// the CLI flag -branch at startup.
 	Base string
 }
 
