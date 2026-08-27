@@ -25,7 +25,10 @@ All resolution happens in one place: `config.Load()`
 Per-task keys are looked up generically (`<task>.model`,
 `<task>.thinking`, `<task>.reasoning`) — adding a new task needs
 **no change** to `config.Load`, which is why the config file is the
-extensibility point ([extending.md](extending.md)).
+extensibility point ([extending.md](extending.md)). The
+[prepare-commit-msg hook](prepare-commit-msg-hook.md) is a task too: a
+`hook` block (`hook.model`, `hook.reasoning`, ...) tunes the hook and is
+resolved by the same generic code.
 
 ## Example config
 

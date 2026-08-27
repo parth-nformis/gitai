@@ -19,7 +19,7 @@ labeled with the Go function that implements it.
 | [reasoning.md](reasoning.md) | Muse Glimmer reasoning mode: the strength dial, model matching, CoT handling |
 | [configuration.md](configuration.md) | Config file, environment variables, priority rules, custom prompts |
 | [extending.md](extending.md) | How to add a new gitai feature (3 touch points) |
-| [prepare-commit-msg-hook.md](prepare-commit-msg-hook.md) | Design for the upcoming auto-commit-message git hook |
+| [prepare-commit-msg-hook.md](prepare-commit-msg-hook.md) | The auto-commit-message git hook: design + implementation |
 
 ## How to read these docs
 

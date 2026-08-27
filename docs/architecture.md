@@ -6,7 +6,7 @@
 gitai/
 ├── cmd/          CLI entry point (flags, dispatch, output)
 ├── client/       OpenAI-compatible HTTP client
-├── commands/     One feature per file (commit, review, pullreq)
+├── commands/     One feature per file (commit, review, pullreq, hook)
 ├── config/       Config file + env var resolution
 ├── git/          Git plumbing (diff sources, commit message sanitization)
 ├── diffprep/     Diff cleaning (filter, stats, truncate, chunk)

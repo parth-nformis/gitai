@@ -192,6 +192,27 @@ Override the built-in prompts by placing `.md` files in `~/.gitai/system_prompts
 
 Edit the files and the next `gitai` run picks them up — no rebuild needed. If a file is missing, gitai falls back to its built-in default.
 
+### Git hook (auto commit message)
+
+Install gitai as your repo's `prepare-commit-msg` hook and a plain
+`git commit` (no `-m`) opens the editor with an AI-generated message
+already in the file. Tweak it if you want, save, done:
+
+```bash
+gitai -install-hook
+git commit        # editor opens pre-filled
+```
+
+The hook only acts for a bare `git commit` — it bails when a message was
+given (`-m`, merge, template) or the message file is not empty, and any
+failure (no API, no staged changes) just exits 0 so a commit is never
+blocked. The hook uses the staged diff only (it never runs `git add -A`).
+Remove it with: `rm .git/hooks/prepare-commit-msg`.
+
+Per-run settings can be tuned via a `hook` block in
+`~/.gitai/gitai.json` (`hook.model`, `hook.thinking`, `hook.reasoning`),
+same as any other task.
+
 ### Update to Latest Version
 
 ```bash
@@ -223,16 +244,18 @@ gitai/
 ├── cmd/                 # CLI entry point
 │   ├── main.go          # Flags, task dispatch, model resolution, auto-commit
 │   ├── update.go        # Self-update handler
-│   └── uninstall.go     # Uninstall handler
+│   ├── uninstall.go     # Uninstall handler
+│   └── install_hook.go  # `gitai -install-hook`: writes the prepare-commit-msg hook
 ├── client/              # HTTP client for OpenAI-compatible APIs
 │   ├── client.go        # Client struct (api_base, api_key, model, http client)
 │   ├── api_call.go      # API call logic, thinking + reasoning mode, auto-fallback
 │   └── reasoning.go     # Muse Glimmer: model matching + strength injection
-├── commands/            # Feature handlers (commit, review, pullreq)
+├── commands/            # Feature handlers (commit, review, pullreq, hook)
 │   ├── handler.go       # Handler interface (Name + Diff + Run)
 │   ├── commit.go        # Commit message generation
 │   ├── review.go        # Code review generation
-│   └── pullreq.go       # PR description generation
+│   ├── pullreq.go       # PR description generation
+│   └── hook.go          # Hook mode: commit pipeline + staged diff (no side effects)
 ├── config/              # Config loading (~/.gitai/gitai.json + env overrides)
 │   └── config.go        # Load() with validation
 ├── git/                 # Git plumbing

@@ -30,6 +30,8 @@ func main() {
 	prFlag := flag.Bool("pr", false, "Alias for --pullreq")
 	updateFlag := flag.Bool("update", false, "Update gitai to the latest version")
 	uninstallFlag := flag.Bool("uninstall", false, "Uninstall gitai from the system")
+	installHookFlag := flag.Bool("install-hook", false, "Install the prepare-commit-msg git hook in this repo")
+	hookFile := flag.String("hook", "", "Hook mode: generate a commit message from the staged diff and write it to this file")
 	thinkFlag := flag.Bool("think", false, "Enable extended thinking mode (overrides config)")
 	reasonFlag := flag.String("reason", "", "Muse Glimmer reasoning strength: low|medium|high|xhigh")
 	branchFlag := flag.String("branch", "main", "Base branch for PR diff (also -b)")
@@ -70,6 +72,10 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 		doUpdate()
 		return
 	}
+	if *installHookFlag {
+		installHook()
+		return
+	}
 
 	// --- Load config from ~/.gitai/gitai.json (with env var overrides) ---
 	v, configDir, err := config.Load()
@@ -87,6 +93,8 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 		handler = &commands.Review{}
 	case *pullreqFlag, *prFlag:
 		handler = &commands.PullReq{Base: *branchFlag}
+	case *hookFile != "":
+		handler = &commands.Hook{}
 	default:
 		flag.Usage()
 		return
@@ -145,8 +153,26 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 
 	result, err := run(ctx, cli, handler, thinking, reasoning, configDir)
 	if err != nil {
+		if *hookFile != "" {
+			// Hook mode must never block a commit: report and exit 0 so
+			// git opens the (empty) message file and the user writes one.
+			fmt.Fprintf(os.Stderr, "gitai hook: %v\n", err)
+			os.Exit(0)
+		}
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
+	}
+
+	if *hookFile != "" {
+		// Hook mode: write the message straight into the file git will
+		// open in the editor. No banner, no auto-commit — the user sees
+		// and approves the message in their own editor.
+		sanitized := git.SanitizeCommitMessage(result)
+		if err := os.WriteFile(*hookFile, []byte(sanitized+"\n"), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "gitai hook: could not write message file: %v\n", err)
+			os.Exit(0)
+		}
+		os.Exit(0)
 	}
 
 	// --- Print the result ---
