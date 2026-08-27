@@ -80,21 +80,30 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 	// --- Load config from ~/.gitai/gitai.json (with env var overrides) ---
 	v, configDir, err := config.Load()
 	if err != nil {
+		if *hookFile != "" {
+			// Hook mode must never block a commit: report and exit 0 so
+			// git opens the (empty) message file and the user writes one.
+			fmt.Fprintf(os.Stderr, "gitai hook: %v\n", err)
+			os.Exit(0)
+		}
 		fmt.Printf("ERROR: %v\n", err)
 		os.Exit(1)
 	}
 
 	// --- Figure out which task to run ---
 	var handler commands.Handler
+	// Hook mode is checked first: if it ever lost precedence to -commit
+	// or -commitmsg, that handler's Diff would run `git add -A` inside the
+	// user's own commit and change what gets committed.
 	switch {
+	case *hookFile != "":
+		handler = &commands.Hook{}
 	case *commitMsgFlag, *commitFlag:
 		handler = &commands.Commit{}
 	case *reviewFlag:
 		handler = &commands.Review{}
 	case *pullreqFlag, *prFlag:
 		handler = &commands.PullReq{Base: *branchFlag}
-	case *hookFile != "":
-		handler = &commands.Hook{}
 	default:
 		flag.Usage()
 		return
@@ -131,8 +140,15 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 	// Validate reasoning strength if set.
 	if reasoning != "" {
 		if !client.ValidReasoningStrength(reasoning) {
-			fmt.Printf("ERROR: invalid reasoning strength '%s'. Must be one of: low, medium, high, xhigh\n", reasoning)
-			os.Exit(1)
+			if *hookFile != "" {
+				// Hook mode must never block a commit: drop the invalid
+				// value and generate with the default strength instead.
+				fmt.Fprintf(os.Stderr, "gitai hook: ignoring invalid reasoning strength %q\n", reasoning)
+				reasoning = ""
+			} else {
+				fmt.Printf("ERROR: invalid reasoning strength '%s'. Must be one of: low, medium, high, xhigh\n", reasoning)
+				os.Exit(1)
+			}
 		}
 	}
 

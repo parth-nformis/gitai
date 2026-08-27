@@ -51,14 +51,27 @@ func installHook() {
 
 	hookPath := filepath.Join(hooksDir, "prepare-commit-msg")
 
+	// A configured core.hooksPath shadows .git/hooks entirely — warn so a
+	// successful install doesn't turn out to be a silent no-op.
+	if out, err := exec.Command("git", "config", "core.hooksPath").Output(); err == nil {
+		if p := strings.TrimSpace(string(out)); p != "" {
+			fmt.Printf("warning: core.hooksPath is set to %s; git will not use the hook in %s\n", p, hooksDir)
+		}
+	}
+
 	// Back up an existing hook so a hand-written one isn't lost silently.
+	// A pre-existing .bak is kept: it may hold a hand-written hook from an
+	// earlier install, which overwriting would lose.
 	if _, err := os.Stat(hookPath); err == nil {
 		backup := hookPath + ".bak"
-		if copyErr := copyFile(hookPath, backup); copyErr != nil {
+		if _, err := os.Stat(backup); err == nil {
+			fmt.Printf("Existing hook found; keeping previous backup %s\n", backup)
+		} else if copyErr := copyFile(hookPath, backup); copyErr != nil {
 			fmt.Printf("ERROR: could not back up existing hook to %s: %v\n", backup, copyErr)
 			os.Exit(1)
+		} else {
+			fmt.Printf("Existing hook backed up to %s\n", backup)
 		}
-		fmt.Printf("Existing hook backed up to %s\n", backup)
 	}
 
 	if err := os.WriteFile(hookPath, []byte(hookScript(binPath, hookPath)), 0o755); err != nil {

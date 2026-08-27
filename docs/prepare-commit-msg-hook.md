@@ -80,12 +80,13 @@ today even though no caller uses it yet.
 
 | Piece | Where | Notes |
 |---|---|---|
-| `gitai -install-hook` | `cmd/install_hook.go` | Resolves the git dir via `git rev-parse --git-dir` (works from subdirs); embeds the **absolute** gitai path (`os.Executable`) in the script so it survives `$PATH` changes; backs up an existing `prepare-commit-msg` to `.bak`; `chmod 0755`. Early-returns in `main` before `config.Load` — installing needs no API. |
-| `gitai -hook <file>` | `commands/hook.go` + `cmd/main.go` | `Hook` embeds `Commit` and overrides only `Diff` → `git.StagedDiff`. `Run` (prompt, `diffprep`, generate) is promoted from `Commit` unchanged. `main` writes `git.SanitizeCommitMessage(result)` into `<file>` and exits 0 on every path — error, success, or clean tree. |
+| `gitai -install-hook` | `cmd/install_hook.go` | Resolves the git dir via `git rev-parse --git-dir` (works from subdirs); embeds the **absolute** gitai path (`os.Executable`) in the script so it survives `$PATH` changes; backs up an existing `prepare-commit-msg` to `.bak` (a pre-existing `.bak` is **kept**, never clobbered — it may hold a hand-written hook); `chmod 0755`; warns when `core.hooksPath` is set, since that shadows `.git/hooks`. Early-returns in `main` before `config.Load` — installing needs no API. |
+| `gitai -hook <file>` | `commands/hook.go` + `cmd/main.go` | `Hook` embeds `Commit` and overrides only `Diff` → `git.StagedDiff`. `Run` (prompt, `diffprep`, generate) is promoted from `Commit` unchanged. `main` writes `git.SanitizeCommitMessage(result)` into `<file>` and exits 0 on every path — error, success, or clean tree. Dispatch checks `-hook` before the task flags, so it can never fall back to `Commit` (whose `git add -A` would run mid-commit); config-load errors and invalid `reasoning` values also resolve to exit 0 (the value is dropped, generation proceeds). |
 | Config | `hook.*` keys | `Name()=="hook"` makes the generic per-task resolution in `main` treat it like any other task (`hook.model`, `hook.thinking`, `hook.reasoning`), falling back to the global model. |
 | Tests | `cmd/install_hook_test.go`, `commands/hook_test.go` | Script guards + resolved path are asserted; `Hook` is checked to satisfy `Handler` (compile-time) and to report `Name()=="hook"`. |
 
-Two deliberate deviations from the sketch above: the script embeds the
-absolute binary path rather than bare `gitai`, and an existing hook is
-backed up to `.bak` rather than overwritten silently. Both are small
-robustness wins that don't change the flow.
+Deliberate deviations from the sketch above: the script embeds the
+absolute binary path rather than bare `gitai`, an existing hook is
+backed up to `.bak` rather than overwritten silently (and a pre-existing
+`.bak` is kept on re-install), and install warns when `core.hooksPath`
+is set. All small robustness wins that don't change the flow.
