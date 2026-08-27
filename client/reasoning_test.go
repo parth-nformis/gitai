@@ -23,6 +23,27 @@ func TestIsMuseGlimmer(t *testing.T) {
 	}
 }
 
+func TestValidReasoningStrength(t *testing.T) {
+	tests := []struct {
+		value string
+		want  bool
+	}{
+		{"low", true},
+		{"medium", true},
+		{"high", true},
+		{"xhigh", true},
+		{"", false},
+		{"LOW", false},
+		{"maximum", false},
+		{"high ", false},
+	}
+	for _, tt := range tests {
+		if got := ValidReasoningStrength(tt.value); got != tt.want {
+			t.Errorf("ValidReasoningStrength(%q) = %v, want %v", tt.value, got, tt.want)
+		}
+	}
+}
+
 func TestWithReasoningStrength(t *testing.T) {
 	tests := []struct {
 		name        string

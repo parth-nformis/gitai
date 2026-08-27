@@ -6,21 +6,15 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/parthdande/gitai/client"
 	"github.com/parthdande/gitai/commands"
 	"github.com/parthdande/gitai/config"
+	"github.com/parthdande/gitai/git"
 )
 
 const (
-	// maxCommitMsgLen caps generated commit messages. Git itself does
-	// not hard-limit commit message size, but anything beyond a few KB
-	// is almost certainly a model runaway and useless in `git log`, so
-	// we truncate well short of where messages become unmanageable.
-	maxCommitMsgLen = 7200
-
 	// gitTimeout bounds the whole run (diff fetch + every API call).
 	// Hierarchical summarization makes multiple calls for large diffs
 	// and local models can be slow, so this needs real headroom.
@@ -128,7 +122,7 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 
 	// Validate reasoning strength if set.
 	if reasoning != "" {
-		if !reasoningValid(reasoning) {
+		if !client.ValidReasoningStrength(reasoning) {
 			fmt.Printf("ERROR: invalid reasoning strength '%s'. Must be one of: low, medium, high, xhigh\n", reasoning)
 			os.Exit(1)
 		}
@@ -163,7 +157,7 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 
 	// --- Auto-commit if --commit was used ---
 	if *commitFlag {
-		sanitized := sanitizeForGit(result)
+		sanitized := git.SanitizeCommitMessage(result)
 		fmt.Println("\nCommitting changes...")
 		cmd := exec.CommandContext(ctx, "git", "commit", "-m", sanitized)
 		cmd.Stdout = os.Stdout
@@ -196,33 +190,4 @@ func run(ctx context.Context, cli *client.Client, h commands.Handler, thinking b
 	}
 
 	return h.Run(ctx, cli, diff, cli.Model, thinking, reasoning, configDir)
-}
-
-func reasoningValid(s string) bool {
-	switch s {
-	case "low", "medium", "high", "xhigh":
-		return true
-	}
-	return false
-}
-
-// sanitizeForGit prepares raw model output for use as a commit message.
-//
-// Models occasionally emit control characters (unicode escapes, stray
-// ANSI codes, null bytes) that are legal in a string but wrong inside
-// a commit message — `git log` output gets mangled and some git tools
-// reject such messages outright. We keep only printable ASCII plus the
-// line break characters, then trim and truncate to maxCommitMsgLen.
-func sanitizeForGit(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		if (r >= 0x20 && r <= 0x7E) || r == '\n' || r == '\r' {
-			b.WriteRune(r)
-		}
-	}
-	result := strings.TrimSpace(b.String())
-	if len(result) > maxCommitMsgLen {
-		result = result[:maxCommitMsgLen]
-	}
-	return result
 }

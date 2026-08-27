@@ -236,7 +236,8 @@ gitai/
 ├── config/              # Config loading (~/.gitai/gitai.json + env overrides)
 │   └── config.go        # Load() with validation
 ├── git/                 # Git plumbing
-│   └── git.go           # Diff sources: StagedDiff, CommitAllDiff, BranchDiff
+│   ├── git.go           # Diff sources: StagedDiff, CommitAllDiff, BranchDiff
+│   └── sanitize.go      # SanitizeCommitMessage: control-char strip, length cap
 ├── diffprep/            # Diff filtering, stats, and chunking before the LLM call
 │   └── preprocess.go    # Noise filtering, truncation, hierarchical chunking
 ├── prompts/             # System prompts

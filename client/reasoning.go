@@ -11,6 +11,17 @@ func IsMuseGlimmer(model string) bool {
 	return strings.Contains(strings.ToLower(model), "muse-glimmer")
 }
 
+// ValidReasoningStrength reports whether s is a supported Muse Glimmer
+// reasoning strength. Kept next to the injection helpers so the set of
+// accepted values lives with the mechanism that consumes it.
+func ValidReasoningStrength(s string) bool {
+	switch s {
+	case "low", "medium", "high", "xhigh":
+		return true
+	}
+	return false
+}
+
 // withReasoningStrength appends "Reasoning strength: <level>" to the system
 // prompt. No-op when level=="" or the prompt already contains a
 // "Reasoning strength:" line (case-insensitive) so a user's own directive wins

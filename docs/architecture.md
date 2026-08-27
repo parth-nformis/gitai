@@ -8,7 +8,7 @@ gitai/
 ├── client/       OpenAI-compatible HTTP client
 ├── commands/     One feature per file (commit, review, pullreq)
 ├── config/       Config file + env var resolution
-├── git/          Git plumbing (diff sources)
+├── git/          Git plumbing (diff sources, commit message sanitization)
 ├── diffprep/     Diff cleaning (filter, stats, truncate, chunk)
 └── prompts/      Default system prompts + hot-reload loader
 ```

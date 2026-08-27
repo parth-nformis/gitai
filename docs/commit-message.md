@@ -59,6 +59,6 @@ out of the Stage-1 summaries entirely, serve muse with
 
 ## Output handling
 
-`cmd/main.go` takes the raw model text through `sanitizeForGit`
-(strips control characters, caps at 7200 chars) before either printing
-or passing it to `git commit -m`.
+`cmd/main.go` takes the raw model text through `git.SanitizeCommitMessage`
+(`git/sanitize.go`: strips control characters, caps at 7200 chars)
+before either printing or passing it to `git commit -m`.
