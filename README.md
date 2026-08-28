@@ -194,21 +194,30 @@ Edit the files and the next `gitai` run picks them up — no rebuild needed. If 
 
 ### Git hook (auto commit message)
 
-Install gitai as your repo's `prepare-commit-msg` hook and a plain
-`git commit` (no `-m`) opens the editor with an AI-generated message
-already in the file. Tweak it if you want, save, done:
+Install gitai as your repo's `prepare-commit-msg` hook, then opt in to AI
+commit messages for that repo. A plain `git commit` (no `-m`) opens the
+editor with an AI-generated message already in the file. Tweak it if you
+want, save, done:
 
 ```bash
-gitai -install-hook
-git commit        # editor opens pre-filled
+gitai -install-hook      # install the hook (generic, per repo)
+gitai -commitmsg-on      # turn AI commit messages ON for this repo
+git commit               # editor opens pre-filled
 ```
+
+AI commit messages are **off by default** for a repo — the installed hook
+does nothing until you run `gitai -commitmsg-on` in that repo. Turn them
+back off with `gitai -commitmsg-off`. The on/off state is stored per repo
+(in the repo's `.git/`), not in git config. This keeps the hook as shared
+infrastructure while each feature is toggled per repo.
 
 The hook only acts for a bare `git commit` — it bails when a message was
 given (`-m`, merge, template) or when the message file already holds a
 real (non-comment) line. Note that git pre-fills the file with its default
 `#` comment block before the hook runs, so the guard tests for actual
-content, not mere non-emptiness. Any failure (no API, no staged changes)
-just exits 0 so a commit is never blocked. The hook uses the staged diff only (it never runs `git add -A`).
+content, not mere non-emptiness. Any failure (no API, no staged changes,
+feature off) just exits 0 so a commit is never blocked. The hook uses the
+staged diff only (it never runs `git add -A`).
 Remove it with: `rm .git/hooks/prepare-commit-msg`.
 
 Per-run settings can be tuned via a `hook` block in
@@ -247,7 +256,8 @@ gitai/
 │   ├── main.go          # Flags, task dispatch, model resolution, auto-commit
 │   ├── update.go        # Self-update handler
 │   ├── uninstall.go     # Uninstall handler
-│   └── install_hook.go  # `gitai -install-hook`: writes the prepare-commit-msg hook
+│   ├── install_hook.go  # `gitai -install-hook`: writes the prepare-commit-msg hook
+│   └── hook_toggle.go   # Per-repo `gitai -commitmsg-on` / `-commitmsg-off`
 ├── client/              # HTTP client for OpenAI-compatible APIs
 │   ├── client.go        # Client struct (api_base, api_key, model, http client)
 │   ├── api_call.go      # API call logic, thinking + reasoning mode, auto-fallback
@@ -270,6 +280,8 @@ gitai/
 │   ├── commit.go        # Default commit system prompt
 │   ├── review.go        # Default review system prompt
 │   └── pullreq.go       # Default pullreq system prompt
+├── spinner/             # Purple braille-dot loading spinner shown while the AI runs
+│   └── spinner.go       # Start/Stop/Note; TTY-aware, writes to stderr only
 └── install.sh           # Automated install: clone, build, install to /usr/local/bin
 ```
 

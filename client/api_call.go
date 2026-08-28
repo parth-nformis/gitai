@@ -8,9 +8,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
+
+	"github.com/parthdande/gitai/spinner"
 )
 
 // defaultHTTPTimeout is the maximum time an API call is allowed to take.
@@ -128,7 +129,7 @@ func (c *Client) Generate(ctx context.Context, prompt, systemPrompt, model strin
 	// For Muse Glimmer this gate never fires: thinking is forced to false
 	// above, so a muse error surfaces directly instead of burning a second call.
 	if err != nil && thinking {
-		fmt.Fprintf(os.Stderr, "Thinking mode failed (%v), falling back to non-thinking...\n", err)
+		spinner.Note("Thinking mode failed (%v), falling back to non-thinking...", err)
 		return c.doGenerate(ctx, prompt, systemPrompt, model, false)
 	}
 
@@ -190,7 +191,7 @@ func (c *Client) doGenerate(ctx context.Context, prompt, systemPrompt, model str
 	}
 
 	// Streaming failed — fall back to non-streaming (some APIs don't support it)
-	fmt.Fprintf(os.Stderr, "Streaming not supported, falling back to non-streamed response...\n")
+	spinner.Note("Streaming not supported, falling back to non-streamed response...")
 
 	bodyNonStream, _ := json.Marshal(chatCompletionRequest{
 		Model:              model,

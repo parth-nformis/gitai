@@ -12,6 +12,7 @@ import (
 	"github.com/parthdande/gitai/commands"
 	"github.com/parthdande/gitai/config"
 	"github.com/parthdande/gitai/git"
+	"github.com/parthdande/gitai/spinner"
 )
 
 const (
@@ -32,6 +33,8 @@ func main() {
 	uninstallFlag := flag.Bool("uninstall", false, "Uninstall gitai from the system")
 	installHookFlag := flag.Bool("install-hook", false, "Install the prepare-commit-msg git hook in this repo")
 	hookFile := flag.String("hook", "", "Hook mode: generate a commit message from the staged diff and write it to this file")
+	commitMsgOnFlag := flag.Bool("commitmsg-on", false, "Enable AI commit messages for this repo (per-repo hook feature)")
+	commitMsgOffFlag := flag.Bool("commitmsg-off", false, "Disable AI commit messages for this repo (per-repo hook feature)")
 	thinkFlag := flag.Bool("think", false, "Enable extended thinking mode (overrides config)")
 	reasonFlag := flag.String("reason", "", "Muse Glimmer reasoning strength: low|medium|high|xhigh")
 	branchFlag := flag.String("branch", "main", "Base branch for PR diff (also -b)")
@@ -76,6 +79,14 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 		installHook()
 		return
 	}
+	if *commitMsgOnFlag {
+		toggleCommitMsg(true)
+		return
+	}
+	if *commitMsgOffFlag {
+		toggleCommitMsg(false)
+		return
+	}
 
 	// --- Load config from ~/.gitai/gitai.json (with env var overrides) ---
 	v, configDir, err := config.Load()
@@ -107,6 +118,12 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 	default:
 		flag.Usage()
 		return
+	}
+
+	// Hook mode: AI commit messages are a per-repo toggle. When it is off
+	// for this repo, no-op silently — the hook must never block a commit.
+	if *hookFile != "" && !isCommitMsgOn() {
+		os.Exit(0)
 	}
 
 	// --- Pick the right model, thinking, and reasoning for this task ---
@@ -221,7 +238,10 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 // Keeping the diff source inside each handler means main never has to
 // know the difference between a staged diff and a branch diff.
 func run(ctx context.Context, cli *client.Client, h commands.Handler, thinking bool, reasoning string, configDir string) (string, error) {
-	fmt.Printf("Running '%s' (model=%s, thinking=%v, reasoning=%s)...\n", h.Name(), cli.Model, thinking, reasoning)
+	// Show a live spinner for the whole run so a slow model doesn't look
+	// frozen; it animates on stderr and is cleared when run returns.
+	sp := spinner.Start(labelFor(h, cli.Model))
+	defer sp.Stop()
 
 	diff, err := h.Diff(ctx)
 	if err != nil {
@@ -232,4 +252,19 @@ func run(ctx context.Context, cli *client.Client, h commands.Handler, thinking b
 	}
 
 	return h.Run(ctx, cli, diff, cli.Model, thinking, reasoning, configDir)
+}
+
+// labelFor builds the spinner label for a task: a short verb plus the model,
+// so the user sees both what gitai is doing and which model it is using.
+func labelFor(h commands.Handler, model string) string {
+	verb := "Working"
+	switch h.Name() {
+	case "commit", "hook":
+		verb = "Generating commit message"
+	case "review":
+		verb = "Reviewing changes"
+	case "pullreq":
+		verb = "Drafting PR description"
+	}
+	return fmt.Sprintf("%s (%s)", verb, model)
 }

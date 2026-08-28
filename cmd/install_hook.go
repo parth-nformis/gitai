@@ -85,7 +85,9 @@ func installHook() {
 	}
 
 	fmt.Printf("Installed prepare-commit-msg hook at %s\n", hookPath)
-	fmt.Println("Now run `git commit` (no -m) in this repo to get an AI-generated message.")
+	fmt.Println("AI commit messages are OFF by default for this repo.")
+	fmt.Println("Enable them with:  gitai -commitmsg-on")
+	fmt.Println("Disable them with: gitai -commitmsg-off")
 }
 
 // gitDirPath resolves the absolute path to the .git directory of the repo
