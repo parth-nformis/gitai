@@ -72,8 +72,9 @@ today even though no caller uses it yet.
 - Never modifies the index or working tree.
 - Never blocks a commit: any error (no API, no model, no staged
   changes) → exit 0, git proceeds normally.
-- Never overwrites: only fills an empty message file from an empty
-  source.
+- Never overwrites: only fills a message file that holds no real
+  (non-comment) content, from an empty source. Git's own default `#`
+  comment block does not count as content.
 - User always sees the message in their editor before it is committed.
 
 ## Implementation (as built)
@@ -83,7 +84,8 @@ today even though no caller uses it yet.
 | `gitai -install-hook` | `cmd/install_hook.go` | Resolves the git dir via `git rev-parse --git-dir` (works from subdirs); embeds the **absolute** gitai path (`os.Executable`) in the script so it survives `$PATH` changes; backs up an existing `prepare-commit-msg` to `.bak` (a pre-existing `.bak` is **kept**, never clobbered — it may hold a hand-written hook); `chmod 0755`; warns when `core.hooksPath` is set, since that shadows `.git/hooks`. Early-returns in `main` before `config.Load` — installing needs no API. |
 | `gitai -hook <file>` | `commands/hook.go` + `cmd/main.go` | `Hook` embeds `Commit` and overrides only `Diff` → `git.StagedDiff`. `Run` (prompt, `diffprep`, generate) is promoted from `Commit` unchanged. `main` writes `git.SanitizeCommitMessage(result)` into `<file>` and exits 0 on every path — error, success, or clean tree. Dispatch checks `-hook` before the task flags, so it can never fall back to `Commit` (whose `git add -A` would run mid-commit); config-load errors and invalid `reasoning` values also resolve to exit 0 (the value is dropped, generation proceeds). |
 | Config | `hook.*` keys | `Name()=="hook"` makes the generic per-task resolution in `main` treat it like any other task (`hook.model`, `hook.thinking`, `hook.reasoning`), falling back to the global model. |
-| Tests | `cmd/install_hook_test.go`, `commands/hook_test.go` | Script guards + resolved path are asserted; `Hook` is checked to satisfy `Handler` (compile-time) and to report `Name()=="hook"`. |
+| Tests | `cmd/install_hook_test.go`, `commands/hook_test.go` | Script guards + resolved path are asserted; `TestHookScriptBailGuards` executes the actual script (fake gitai) against comment-only, empty, real-content, and source-set files; `Hook` is checked to satisfy `Handler` (compile-time) and to report `Name()=="hook"`. |
+| Script guard | `cmd/install_hook.go` (`hookScript`) | Bail when `$2` (source) is set, or when the message file already holds a real (non-comment) line. The subtlety: git writes its default `#` comment block into the file **before** running the hook, so the file is never empty at hook time — the guard therefore greps for real content (`grep -qEv '^[[:space:]]*(#|$)'`) instead of testing non-emptiness. The original `[ -s "$1" ]` guard bailed on every real `git commit`; `TestHookScriptBailGuards` is the regression pin. |
 
 Deliberate deviations from the sketch above: the script embeds the
 absolute binary path rather than bare `gitai`, an existing hook is

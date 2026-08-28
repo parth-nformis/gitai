@@ -14,14 +14,19 @@ import (
 //
 // The two guards make the hook a no-op except for a plain `git commit` with
 // no message: $2 is the "source" (message/merge/template/...), which is only
-// empty for a bare commit, and $1 is the message file, which git starts empty.
+// empty for a bare commit, and $1 is the message file. Note that git
+// pre-fills $1 with its default "# ..." comment block before running this
+// hook, so the file guard must test for *real* (non-comment) content, not
+// just non-emptiness.
 // Every exit path is 0 — a hook failure must never block a real commit.
 func hookScript(binPath, hookPath string) string {
 	return fmt.Sprintf(`#!/bin/sh
 # gitai prepare-commit-msg hook - auto-generates a commit message.
 # Installed by `+"`gitai -install-hook`"+`. Remove with: rm %s
 [ -n "$2" ] && exit 0        # source set (-m/merge/template) -> leave alone
-[ -s "$1" ] && exit 0        # message file already has content -> leave alone
+# git pre-fills $1 with its default "# ..." comment block, so bail only
+# when the file already holds a real, non-comment line.
+grep -qEv '^[[:space:]]*(#|$)' "$1" 2>/dev/null && exit 0
 "%s" -hook "$1" 2>/dev/null || exit 0
 exit 0
 `, hookPath, binPath)

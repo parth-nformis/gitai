@@ -204,9 +204,11 @@ git commit        # editor opens pre-filled
 ```
 
 The hook only acts for a bare `git commit` — it bails when a message was
-given (`-m`, merge, template) or the message file is not empty, and any
-failure (no API, no staged changes) just exits 0 so a commit is never
-blocked. The hook uses the staged diff only (it never runs `git add -A`).
+given (`-m`, merge, template) or when the message file already holds a
+real (non-comment) line. Note that git pre-fills the file with its default
+`#` comment block before the hook runs, so the guard tests for actual
+content, not mere non-emptiness. Any failure (no API, no staged changes)
+just exits 0 so a commit is never blocked. The hook uses the staged diff only (it never runs `git add -A`).
 Remove it with: `rm .git/hooks/prepare-commit-msg`.
 
 Per-run settings can be tuned via a `hook` block in
