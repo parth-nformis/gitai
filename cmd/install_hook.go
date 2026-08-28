@@ -27,7 +27,11 @@ func hookScript(binPath, hookPath string) string {
 # git pre-fills $1 with its default "# ..." comment block, so bail only
 # when the file already holds a real, non-comment line.
 grep -qEv '^[[:space:]]*(#|$)' "$1" 2>/dev/null && exit 0
-"%s" -hook "$1" 2>/dev/null || exit 0
+# stderr stays attached (no 2>/dev/null): gitai's live spinner and its
+# "gitai hook: ..." warnings are written there, so the user sees the
+# work happening instead of a silent wait. When stderr is not a TTY,
+# gitai degrades to a single static line.
+"%s" -hook "$1" || exit 0
 exit 0
 `, hookPath, binPath)
 }

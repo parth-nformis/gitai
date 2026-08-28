@@ -114,3 +114,10 @@ inside `gitai -hook`, which reads the marker via the repo's git dir.
 That keeps the script's safety guards the only logic that runs at
 commit time, and leaves room for future hook features to each read
 their own marker without touching the script.
+
+One deliberate script change: the early version ran
+`gitai -hook ... 2>/dev/null`. git keeps the hook's stderr attached to
+the user's terminal, so that redirect swallowed the live spinner and
+the `gitai hook:` warnings — a slow model looked frozen again. The
+script now leaves stderr attached; gitai already degrades to a single
+static line when stderr is not a TTY, so piped/CI runs stay clean.
