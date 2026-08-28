@@ -20,6 +20,7 @@ labeled with the Go function that implements it.
 | [configuration.md](configuration.md) | Config file, environment variables, priority rules, custom prompts |
 | [extending.md](extending.md) | How to add a new gitai feature (3 touch points) |
 | [prepare-commit-msg-hook.md](prepare-commit-msg-hook.md) | The auto-commit-message git hook: design + implementation |
+| [push-pipeline.md](push-pipeline.md) | The pre-push quality gate: files-in-push, per-language tools, threshold blocking |
 
 ## How to read these docs
 

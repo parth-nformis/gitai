@@ -36,8 +36,23 @@ exit 0
 `, hookPath, binPath)
 }
 
-// installHook writes the prepare-commit-msg hook into the current repo's
-// .git/hooks. Requires a git repository and an installed gitai binary.
+// prePushHookScript returns the shell script installed as pre-push. git
+// passes the remote name and URL as $1/$2 and the refs being pushed on
+// stdin; the remote name is forwarded so gitai can resolve that remote's
+// default branch. A non-zero exit from gitai aborts the push — that is the
+// whole point of the hook, so there is no `|| exit 0` here.
+func prePushHookScript(binPath, hookPath string) string {
+	return fmt.Sprintf(`#!/bin/sh
+# gitai pre-push hook - runs the check pipeline on the pushed files.
+# Installed by `+"`gitai -install-hook`"+`. Remove with: rm %s
+exec "%s" -prepush "$1"
+`, hookPath, binPath)
+}
+
+// installHook writes both gitai hooks (prepare-commit-msg and pre-push)
+// into the current repo's .git/hooks. Requires a git repository and an
+// installed gitai binary. Both features are off by default per repo; the
+// hooks stay installed as shared infrastructure.
 func installHook() {
 	// Works from subdirectories of the repo too. Error means no .git found.
 	absGitDir, err := gitDirPath()
@@ -58,8 +73,6 @@ func installHook() {
 		os.Exit(1)
 	}
 
-	hookPath := filepath.Join(hooksDir, "prepare-commit-msg")
-
 	// A configured core.hooksPath shadows .git/hooks entirely — warn so a
 	// successful install doesn't turn out to be a silent no-op.
 	if out, err := exec.Command("git", "config", "core.hooksPath").Output(); err == nil {
@@ -68,30 +81,46 @@ func installHook() {
 		}
 	}
 
-	// Back up an existing hook so a hand-written one isn't lost silently.
-	// A pre-existing .bak is kept: it may hold a hand-written hook from an
-	// earlier install, which overwriting would lose.
-	if _, err := os.Stat(hookPath); err == nil {
-		backup := hookPath + ".bak"
-		if _, err := os.Stat(backup); err == nil {
-			fmt.Printf("Existing hook found; keeping previous backup %s\n", backup)
-		} else if copyErr := copyFile(hookPath, backup); copyErr != nil {
-			fmt.Printf("ERROR: could not back up existing hook to %s: %v\n", backup, copyErr)
+	hooks := []struct {
+		name string
+		body string
+	}{
+		{"prepare-commit-msg", hookScript(binPath, filepath.Join(hooksDir, "prepare-commit-msg"))},
+		{"pre-push", prePushHookScript(binPath, filepath.Join(hooksDir, "pre-push"))},
+	}
+	for _, h := range hooks {
+		hookPath := filepath.Join(hooksDir, h.name)
+		backupHook(hookPath)
+		if err := os.WriteFile(hookPath, []byte(h.body), 0o755); err != nil {
+			fmt.Printf("ERROR: could not write %s hook: %v\n", h.name, err)
 			os.Exit(1)
-		} else {
-			fmt.Printf("Existing hook backed up to %s\n", backup)
 		}
+		fmt.Printf("Installed %s hook at %s\n", h.name, hookPath)
 	}
 
-	if err := os.WriteFile(hookPath, []byte(hookScript(binPath, hookPath)), 0o755); err != nil {
-		fmt.Printf("ERROR: could not write hook: %v\n", err)
+	fmt.Println()
+	fmt.Println("Both features are OFF by default for this repo:")
+	fmt.Println("  AI commit messages: gitai -commitmsg-on  /  gitai -commitmsg-off")
+	fmt.Println("  Push checks:        gitai push-check enable  /  gitai push-check disable")
+}
+
+// backupHook preserves a pre-existing hook under .bak so a hand-written
+// one isn't lost silently. A pre-existing .bak is kept: it may hold a
+// hand-written hook from an earlier install, which overwriting would lose.
+func backupHook(hookPath string) {
+	if _, err := os.Stat(hookPath); err != nil {
+		return
+	}
+	backup := hookPath + ".bak"
+	if _, err := os.Stat(backup); err == nil {
+		fmt.Printf("Existing %s hook found; keeping previous backup %s\n", filepath.Base(hookPath), backup)
+		return
+	}
+	if err := copyFile(hookPath, backup); err != nil {
+		fmt.Printf("ERROR: could not back up existing hook to %s: %v\n", backup, err)
 		os.Exit(1)
 	}
-
-	fmt.Printf("Installed prepare-commit-msg hook at %s\n", hookPath)
-	fmt.Println("AI commit messages are OFF by default for this repo.")
-	fmt.Println("Enable them with:  gitai -commitmsg-on")
-	fmt.Println("Disable them with: gitai -commitmsg-off")
+	fmt.Printf("Existing %s hook backed up to %s\n", filepath.Base(hookPath), backup)
 }
 
 // gitDirPath resolves the absolute path to the .git directory of the repo

@@ -30,21 +30,21 @@ func chdirToTempGitRepo(t *testing.T) func() {
 	}
 }
 
-func TestCommitMsgToggleOnOff(t *testing.T) {
+func TestFeatureToggleOnOff(t *testing.T) {
 	cleanup := chdirToTempGitRepo(t)
 	defer cleanup()
 
-	if isCommitMsgOn() {
+	if isFeatureOn("commitmsg") {
 		t.Fatal("expected feature OFF in a fresh repo")
 	}
 
-	if err := setCommitMsgToggle(true); err != nil {
+	if err := setFeatureToggle("commitmsg", true); err != nil {
 		t.Fatalf("enable: %v", err)
 	}
-	if !isCommitMsgOn() {
+	if !isFeatureOn("commitmsg") {
 		t.Fatal("expected feature ON after enabling")
 	}
-	path, err := commitMsgTogglePath()
+	path, err := featureMarkerPath("commitmsg")
 	if err != nil {
 		t.Fatalf("toggle path: %v", err)
 	}
@@ -52,10 +52,10 @@ func TestCommitMsgToggleOnOff(t *testing.T) {
 		t.Fatalf("marker missing after enable: %v", err)
 	}
 
-	if err := setCommitMsgToggle(false); err != nil {
+	if err := setFeatureToggle("commitmsg", false); err != nil {
 		t.Fatalf("disable: %v", err)
 	}
-	if isCommitMsgOn() {
+	if isFeatureOn("commitmsg") {
 		t.Fatal("expected feature OFF after disabling")
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -63,29 +63,29 @@ func TestCommitMsgToggleOnOff(t *testing.T) {
 	}
 }
 
-func TestCommitMsgToggleIdempotent(t *testing.T) {
+func TestFeatureToggleIdempotent(t *testing.T) {
 	cleanup := chdirToTempGitRepo(t)
 	defer cleanup()
 
 	for i := range 2 {
-		if err := setCommitMsgToggle(true); err != nil {
+		if err := setFeatureToggle("commitmsg", true); err != nil {
 			t.Fatalf("enable #%d: %v", i+1, err)
 		}
 	}
-	if !isCommitMsgOn() {
+	if !isFeatureOn("commitmsg") {
 		t.Fatal("expected feature ON")
 	}
 	for i := range 2 {
-		if err := setCommitMsgToggle(false); err != nil {
+		if err := setFeatureToggle("commitmsg", false); err != nil {
 			t.Fatalf("disable #%d: %v", i+1, err)
 		}
 	}
-	if isCommitMsgOn() {
+	if isFeatureOn("commitmsg") {
 		t.Fatal("expected feature OFF")
 	}
 }
 
-func TestCommitMsgToggleOutsideRepo(t *testing.T) {
+func TestFeatureToggleOutsideRepo(t *testing.T) {
 	orig, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
@@ -97,10 +97,40 @@ func TestCommitMsgToggleOutsideRepo(t *testing.T) {
 	defer os.Chdir(orig)
 
 	// Not a git repo: the feature reads as OFF and enabling must error.
-	if isCommitMsgOn() {
+	if isFeatureOn("commitmsg") {
 		t.Fatal("expected feature OFF outside a repo")
 	}
-	if err := setCommitMsgToggle(true); err == nil {
+	if err := setFeatureToggle("commitmsg", true); err == nil {
 		t.Fatal("expected an error enabling outside a repo")
+	}
+}
+
+// TestFeatureTogglesAreIndependent pins the generalized marker model:
+// each hook feature keeps its own marker, so enabling one never leaks
+// into the other.
+func TestFeatureTogglesAreIndependent(t *testing.T) {
+	cleanup := chdirToTempGitRepo(t)
+	defer cleanup()
+
+	if err := setFeatureToggle("pushcheck", true); err != nil {
+		t.Fatalf("enable pushcheck: %v", err)
+	}
+	if !isFeatureOn("pushcheck") {
+		t.Fatal("expected pushcheck ON")
+	}
+	if isFeatureOn("commitmsg") {
+		t.Fatal("enabling pushcheck must not turn on commitmsg")
+	}
+	if err := setFeatureToggle("commitmsg", true); err != nil {
+		t.Fatalf("enable commitmsg: %v", err)
+	}
+	if !isFeatureOn("commitmsg") || !isFeatureOn("pushcheck") {
+		t.Fatal("expected both features ON")
+	}
+	if err := setFeatureToggle("pushcheck", false); err != nil {
+		t.Fatalf("disable pushcheck: %v", err)
+	}
+	if !isFeatureOn("commitmsg") {
+		t.Fatal("disabling pushcheck must not turn off commitmsg")
 	}
 }

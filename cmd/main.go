@@ -23,6 +23,21 @@ const (
 )
 
 func main() {
+	// --- Subcommand-style toggles (handled before flag parsing) ---
+	// `gitai push-check enable|disable` toggles the push pipeline for the
+	// current repo; handled here so the bare word is never parsed as a flag.
+	if len(os.Args) >= 2 && os.Args[1] == "push-check" {
+		if len(os.Args) == 3 && os.Args[2] == "enable" {
+			toggleFeature("pushcheck", true)
+		} else if len(os.Args) == 3 && os.Args[2] == "disable" {
+			toggleFeature("pushcheck", false)
+		} else {
+			fmt.Println("Usage: gitai push-check enable|disable")
+			os.Exit(1)
+		}
+		return
+	}
+
 	// --- Read CLI flags ---
 	commitMsgFlag := flag.Bool("commitmsg", false, "Generate a commit message from git diff and print it")
 	commitFlag := flag.Bool("commit", false, "Generate a commit message and automatically commit all changes")
@@ -35,6 +50,7 @@ func main() {
 	hookFile := flag.String("hook", "", "Hook mode: generate a commit message from the staged diff and write it to this file")
 	commitMsgOnFlag := flag.Bool("commitmsg-on", false, "Enable AI commit messages for this repo (per-repo hook feature)")
 	commitMsgOffFlag := flag.Bool("commitmsg-off", false, "Disable AI commit messages for this repo (per-repo hook feature)")
+	prePushFlag := flag.Bool("prepush", false, "Pre-push hook mode: run the check pipeline on the pushed files (refs read from stdin)")
 	thinkFlag := flag.Bool("think", false, "Enable extended thinking mode (overrides config)")
 	reasonFlag := flag.String("reason", "", "Muse Glimmer reasoning strength: low|medium|high|xhigh")
 	branchFlag := flag.String("branch", "main", "Base branch for PR diff (also -b)")
@@ -80,11 +96,17 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 		return
 	}
 	if *commitMsgOnFlag {
-		toggleCommitMsg(true)
+		toggleFeature("commitmsg", true)
 		return
 	}
 	if *commitMsgOffFlag {
-		toggleCommitMsg(false)
+		toggleFeature("commitmsg", false)
+		return
+	}
+	// Pre-push hook mode: its own config load (with defaults fallback) and
+	// its own exit-code contract — 0 lets the push through, 1 blocks it.
+	if *prePushFlag {
+		runPrePush()
 		return
 	}
 
@@ -122,7 +144,7 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 
 	// Hook mode: AI commit messages are a per-repo toggle. When it is off
 	// for this repo, no-op silently — the hook must never block a commit.
-	if *hookFile != "" && !isCommitMsgOn() {
+	if *hookFile != "" && !isFeatureOn("commitmsg") {
 		os.Exit(0)
 	}
 

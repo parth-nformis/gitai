@@ -192,35 +192,44 @@ Override the built-in prompts by placing `.md` files in `~/.gitai/system_prompts
 
 Edit the files and the next `gitai` run picks them up — no rebuild needed. If a file is missing, gitai falls back to its built-in default.
 
-### Git hook (auto commit message)
+### Git hooks
 
-Install gitai as your repo's `prepare-commit-msg` hook, then opt in to AI
-commit messages for that repo. A plain `git commit` (no `-m`) opens the
-editor with an AI-generated message already in the file. Tweak it if you
-want, save, done:
+`gitai -install-hook` installs **two** hooks in the current repo (existing
+hooks are backed up to `.bak` first). Both are off by default and toggle
+per repo, stored in the repo's `.git/` (never in git config):
 
 ```bash
-gitai -install-hook      # install the hook (generic, per repo)
-gitai -commitmsg-on      # turn AI commit messages ON for this repo
-git commit               # editor opens pre-filled
+gitai -install-hook        # install both hooks (generic, per repo)
+
+# 1) AI commit messages (prepare-commit-msg hook)
+gitai -commitmsg-on        # turn AI commit messages ON for this repo
+git commit                 # editor opens pre-filled
+
+# 2) Push checks (pre-push hook)
+gitai push-check enable    # the next `git push` runs the check pipeline
 ```
 
-AI commit messages are **off by default** for a repo — the installed hook
-does nothing until you run `gitai -commitmsg-on` in that repo. Turn them
-back off with `gitai -commitmsg-off`. The on/off state is stored per repo
-(in the repo's `.git/`), not in git config. This keeps the hook as shared
-infrastructure while each feature is toggled per repo.
+**AI commit messages** only act for a bare `git commit` — they bail when a
+message was given (`-m`, merge, template) or when the message file already
+holds a real (non-comment) line (git pre-fills its default `#` comment
+block, so the guard tests for actual content, not mere non-emptiness).
+Any failure (no API, no staged changes, feature off) exits 0 so a commit
+is never blocked. The hook uses the staged diff only (it never runs
+`git add -A`). Remove it with `rm .git/hooks/prepare-commit-msg`.
 
-The hook only acts for a bare `git commit` — it bails when a message was
-given (`-m`, merge, template) or when the message file already holds a
-real (non-comment) line. Note that git pre-fills the file with its default
-`#` comment block before the hook runs, so the guard tests for actual
-content, not mere non-emptiness. Any failure (no API, no staged changes,
-feature off) just exits 0 so a commit is never blocked. The hook uses the
-staged diff only (it never runs `git add -A`).
-Remove it with: `rm .git/hooks/prepare-commit-msg`.
+**Push checks** run a quality pipeline on `git push`: only the files in
+the push are checked, one formatter + one linter per detected language
+(go, python, node, shell, html, yaml), each step shown live with the
+spinner. A format failure blocks the push immediately; lint blocks only
+when findings affect ≥ 50% of the checked files (configurable, `0` = any
+finding blocks). Missing tools warn and skip — they never block — and
+gitai's own failures never block a push. Tune it via the `pushchecks`
+block in `~/.gitai/gitai.json` (threshold, format/lint toggles, tool
+overrides). See [docs/push-pipeline.md](docs/push-pipeline.md) for the
+full design. Remove it with `rm .git/hooks/pre-push` (or just
+`gitai push-check disable`).
 
-Per-run settings can be tuned via a `hook` block in
+Per-run AI settings can be tuned via a `hook` block in
 `~/.gitai/gitai.json` (`hook.model`, `hook.thinking`, `hook.reasoning`),
 same as any other task.
 
@@ -256,8 +265,9 @@ gitai/
 │   ├── main.go          # Flags, task dispatch, model resolution, auto-commit
 │   ├── update.go        # Self-update handler
 │   ├── uninstall.go     # Uninstall handler
-│   ├── install_hook.go  # `gitai -install-hook`: writes the prepare-commit-msg hook
-│   └── hook_toggle.go   # Per-repo `gitai -commitmsg-on` / `-commitmsg-off`
+│   ├── install_hook.go  # `gitai -install-hook`: writes both hooks (prepare-commit-msg + pre-push)
+│   ├── hook_toggle.go   # Per-repo feature toggles (`-commitmsg-on/-off`, `push-check enable|disable`)
+│   └── push_check.go    # `-prepush` mode: ref parsing, option loading, step report
 ├── client/              # HTTP client for OpenAI-compatible APIs
 │   ├── client.go        # Client struct (api_base, api_key, model, http client)
 │   ├── api_call.go      # API call logic, thinking + reasoning mode, auto-fallback
@@ -272,7 +282,12 @@ gitai/
 │   └── config.go        # Load() with validation
 ├── git/                 # Git plumbing
 │   ├── git.go           # Diff sources: StagedDiff, CommitAllDiff, BranchDiff
-│   └── sanitize.go      # SanitizeCommitMessage: control-char strip, length cap
+│   ├── sanitize.go      # SanitizeCommitMessage: control-char strip, length cap
+│   └── push_files.go    # PushFiles: which files a push changes (diff / merge-base / deletions)
+├── pipeline/            # The pre-push check pipeline (push-checks)
+│   ├── detect.go        # Language detection by file extension (go, python, node, shell, html, yaml)
+│   ├── tools.go         # Default formatter + linter per language, FailOnOut semantics
+│   └── run.go           # Step runner (spinner + timeout), threshold blocking, affected-file counting
 ├── diffprep/            # Diff filtering, stats, and chunking before the LLM call
 │   └── preprocess.go    # Noise filtering, truncation, hierarchical chunking
 ├── prompts/             # System prompts
