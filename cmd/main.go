@@ -16,6 +16,10 @@ import (
 )
 
 const (
+	// Version is the release version of gitai. Bump manually when
+	// releasing: MAJOR.MINOR.PATCH.
+	Version = "0.1.0"
+
 	// gitTimeout bounds the whole run (diff fetch + every API call).
 	// Hierarchical summarization makes multiple calls for large diffs
 	// and local models can be slow, so this needs real headroom.
@@ -67,12 +71,14 @@ func main() {
 	thinkFlag := flag.Bool("think", false, "Enable extended thinking mode (overrides config)")
 	reasonFlag := flag.String("reason", "", "Muse Glimmer reasoning strength: low|medium|high|xhigh")
 	branchFlag := flag.String("branch", "main", "Base branch for PR diff (also -b)")
+	versionFlag := flag.Bool("version", false, "Print version and exit")
 	// -b is registered only so that passing it does not produce a
 	// "flag provided but not defined" error; the long form carries
 	// the value, so this result is intentionally discarded.
 	_ = flag.String("b", "main", "Short alias for --branch")
 
 	flag.Usage = func() {
+		fmt.Printf("gitai version %s\n\n", Version)
 		fmt.Println(`gitai - AI-assisted git commits, messages, PRs, and code reviews
 
 Repo commands (per-repo state):
@@ -99,6 +105,11 @@ System prompts: ~/.gitai/system_prompts/<command>.md
   (e.g. commit.md, review.md, pullreq.md) - edit for hot-reload`)
 	}
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Println(Version)
+		return
+	}
 
 	// --- Special commands (no config needed) ---
 	if *uninstallFlag {
