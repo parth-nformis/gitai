@@ -21,10 +21,13 @@ TEMP_BUILD_DIR=$(mktemp -d)
 # Clone the repository to the temp directory silently
 git clone -q --depth 1 https://github.com/parthdande/gitai.git "$TEMP_BUILD_DIR" 2>/dev/null
 
-# Build the binary inside the temp directory
+# Build the binary inside the temp directory. Build the whole ./cmd
+# package rather than main.go alone: cmd/ is multi-file, and a
+# file-mode build compiles only that one file, leaving every function
+# in a sibling file undefined so the build fails.
 (
     cd "$TEMP_BUILD_DIR"
-    go build -o gitai cmd/main.go
+    go build -o gitai ./cmd
 )
 
 # Install destination

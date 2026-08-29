@@ -11,7 +11,7 @@ Built in Go. Zero runtime dependencies beyond Go itself during install. Streamin
 
 ```bash
 # Install
-bash <(curl -s https://raw.githubusercontent.com/parth-nformis/gitai/main/install.sh)
+bash <(curl -s https://raw.githubusercontent.com/parthdande/gitai/main/install.sh)
 
 # Configure
 export API_BASE="http://localhost:8000/v1"
@@ -47,7 +47,7 @@ Clones the latest code, builds in a temp directory, and installs the binary to `
 ```bash
 git clone https://github.com/parthdande/gitai.git
 cd gitai
-go build -o gitai cmd/main.go
+go build -o gitai ./cmd
 sudo mv gitai /usr/local/bin/
 ```
 
