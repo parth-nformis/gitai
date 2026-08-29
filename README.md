@@ -79,17 +79,101 @@ Created automatically at `~/.gitai/gitai.json` on first install:
 }
 ```
 
+Everything gitai does is configurable through this one file (or the
+environment variables in [Environment Variables](#environment-variables)).
+Full key reference:
+
+| Key | Type | Default | What it does |
+|-----|------|---------|--------------|
+| `api_base` | string | — (**required**) | Base URL of an OpenAI-compatible API (vLLM, Ollama, OpenAI, LiteLLM, Groq, ...) |
+| `api_key` | string | `""` | API key. Optional for local servers |
+| `model` | string | — | Global fallback model. Required unless at least one per-task `model` is set |
+| `reasoning` | string | off | Default reasoning strength for [Muse Glimmer](#reasoning-mode-muse-glimmer): `low` / `medium` / `high` / `xhigh` |
+| `<task>.model` | string | global `model` | Per-task model override (`task` = `commit`, `review`, `pullreq`, `hook`) |
+| `<task>.thinking` | bool | `false` | Extended thinking for that task; overrides the `-think` flag when set |
+| `<task>.reasoning` | string | global `reasoning` | Per-task reasoning strength; the `-reason` flag still wins when given |
+| `pushchecks.format` | bool | `true` | Run the formatter step on `git push` |
+| `pushchecks.lint` | bool | `true` | Run the linter step on `git push` |
+| `pushchecks.threshold` | int | `50` | Push is blocked when lint findings affect ≥ this % of checked files; `0` = any finding blocks |
+| `pushchecks.tools.<lang>.format` | string | default tool | Replace the formatter command line for a language; `{files}` is replaced with the file list |
+| `pushchecks.tools.<lang>.lint` | string | default tool | Replace the linter command line for a language; `{files}` is replaced with the file list |
+
+`<task>` keys: `commit` (`-commit`/`-commitmsg`), `review` (`-review`),
+`pullreq` (`-pullreq`/`-pr`), and `hook` (used when the installed
+prepare-commit-msg hook runs).
+
+Full example with every key:
+
+```json
+{
+  "api_base": "http://localhost:8000/v1",
+  "api_key": "",
+  "model": "Qwen/Qwen3-32B",
+  "reasoning": "medium",
+  "commit":  { "model": "Qwen/Qwen3-32B", "thinking": true, "reasoning": "low" },
+  "review":  { "model": "Qwen/Qwen3-32B", "thinking": false, "reasoning": "high" },
+  "pullreq": { "model": "Qwen/Qwen3-32B", "thinking": false },
+  "hook":    { "model": "Qwen/Qwen3-32B", "thinking": false },
+  "pushchecks": {
+    "format": true,
+    "lint": true,
+    "threshold": 50,
+    "tools": {
+      "python": { "lint": "ruff check --select E,F {files}" }
+    }
+  }
+}
+```
+
 ### Per-task Model, Thinking, and Reasoning
 
-Assign different models and thinking settings per command:
+Assign different models, thinking, and reasoning settings per command:
 
 ```json
 {
   "api_base": "https://api.openai.com/v1",
   "api_key": "sk-...",
-  "commit": { "model": "gpt-4o-mini", "thinking": false },
+  "commit": { "model": "gpt-4o-mini", "thinking": false, "reasoning": "low" },
   "review": { "model": "gpt-4o", "thinking": true },
-  "pullreq": { "model": "gpt-4o", "thinking": false }
+  "pullreq": { "model": "gpt-4o", "thinking": false },
+  "hook": { "model": "gpt-4o-mini", "thinking": false }
+}
+```
+
+### Push Checks
+
+The `pushchecks` block configures the pre-push check pipeline that runs
+when [push checks](#git-hooks) are enabled for a repo. One formatter +
+one linter per detected language:
+
+| Language | Files | Formatter (default) | Linter (default) |
+|----------|-------|---------------------|------------------|
+| go | `.go` | `gofmt -l` | `golangci-lint run` |
+| python | `.py` | `black --check` | `ruff check` |
+| node | `.js` `.jsx` `.ts` `.tsx` `.mjs` `.cjs` | `prettier --check` | `eslint` |
+| shell | `.sh` `.bash` | `shfmt -d` | `shellcheck` |
+| html | `.html` `.htm` | `prettier --check` | `htmlhint` |
+| yaml | `.yml` `.yaml` | `prettier --check` | `yamllint` |
+
+- A **format failure always blocks** the push (set `pushchecks.format`
+  to `false` to run it without blocking, or disable it).
+- **Lint findings block** only when they affect ≥ `threshold` % of the
+  checked files (`threshold: 0` blocks on any finding; set
+  `pushchecks.lint` to `false` to disable).
+- Missing tools warn and skip — they never block a push.
+
+Override individual tools by language; `{files}` is replaced with the
+pushed files:
+
+```json
+{
+  "pushchecks": {
+    "threshold": 80,
+    "tools": {
+      "go": { "lint": "golangci-lint run --fast {files}" },
+      "python": { "format": "black --line-length 100 --check {files}" }
+    }
+  }
 }
 ```
 
@@ -99,18 +183,18 @@ Assign different models and thinking settings per command:
 |----------|-----------|-------------|
 | `API_BASE` | `api_base` | Base URL of your API server (required) |
 | `API_KEY` | `api_key` | API key (optional for local servers) |
-| `MODEL` | `model` | Global fallback model name |
-| `GEMINI_API_BASE` | — | Alternative for `API_BASE` |
-| `GEMINI_API_KEY` | — | Alternative for `API_KEY` |
+| `MODEL` | `model` | One-off model override — when set, it **wins over the config file's `model`**, so trying a different model needs no config edit |
+| `GEMINI_API_BASE` | — | Legacy alias for `API_BASE` (kept from when gitai targeted a specific provider) |
+| `GEMINI_API_KEY` | — | Legacy alias for `API_KEY` |
 
-Priority (highest to lowest):
-1. `--reason` CLI flag (reasoning only)
-2. Per-task config (`commit.model`, `commit.thinking`, `commit.reasoning`, `review.model`, ...)
-3. Global config (`model`, `reasoning`)
-4. Environment variables (`MODEL`, `API_BASE`, `API_KEY`)
+Precedence, key by key (highest wins):
 
-Note: for thinking, a per-task `<task>.thinking` value overrides the
-`--think` flag when both are present.
+| Key | Order |
+|-----|-------|
+| `model` | per-task `<task>.model` → `MODEL` env var → global `model` |
+| `reasoning` | `-reason` flag → per-task `<task>.reasoning` → global `reasoning` |
+| `thinking` | per-task `<task>.thinking` → `-think` flag |
+| `api_base` / `api_key` | config file → `API_BASE` / `API_KEY` (env vars only fill in when the file has no value, so a committed team config stays stable when the same machine has env vars set for other tools) |
 
 ### Example Configurations
 
