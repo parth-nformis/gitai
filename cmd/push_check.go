@@ -13,8 +13,8 @@ import (
 	"github.com/parthdande/gitai/pipeline"
 )
 
-// runPrePush is the -prepush mode, invoked from the pre-push hook that
-// `gitai -install-hook` installs. git passes the remote name and URL as
+// runPrePush is the -pre-push mode, invoked from the pre-push hook that
+// `gitai hook install` installs. git passes the remote name and URL as
 // hook arguments and writes the refs being pushed on stdin, one line per
 // ref: "<local ref> <local object> <remote ref> <remote object>".
 //
@@ -80,7 +80,7 @@ func readPushRefs(r io.Reader) ([]git.RefPair, error) {
 func hookRemoteName() string {
 	remote := "origin"
 	for i, a := range os.Args {
-		if a == "-prepush" && i+1 < len(os.Args) && !strings.HasPrefix(os.Args[i+1], "-") {
+		if a == "-pre-push" && i+1 < len(os.Args) && !strings.HasPrefix(os.Args[i+1], "-") {
 			remote = os.Args[i+1]
 			break
 		}

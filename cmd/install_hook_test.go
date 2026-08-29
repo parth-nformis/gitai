@@ -15,7 +15,7 @@ func TestHookScript(t *testing.T) {
 		"#!/bin/sh",
 		`[ -n "$2" ] && exit 0`, // bail when the user gave -m / merge / template
 		`grep -qEv '^[[:space:]]*(#|$)' "$1" 2>/dev/null && exit 0`, // bail only on real (non-comment) content
-		`"/usr/local/bin/gitai" -hook "$1"`,
+		`"/usr/local/bin/gitai" -commit-msg-file "$1"`,
 		"rm /repo/.git/hooks/prepare-commit-msg",
 	} {
 		if !strings.Contains(script, want) {
@@ -38,9 +38,9 @@ func TestHookScriptBailGuards(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	// Fake gitai: when invoked as "gitai -hook <file>", write a marker.
+	// Fake gitai: when invoked as "gitai -commit-msg-file <file>", write a marker.
 	fakeBin := filepath.Join(dir, "gitai")
-	if err := os.WriteFile(fakeBin, []byte("#!/bin/sh\n[ \"$1\" = \"-hook\" ] && { printf 'generated message\\n' > \"$2\"; exit 0; }\nexit 0\n"), 0o755); err != nil {
+	if err := os.WriteFile(fakeBin, []byte("#!/bin/sh\n[ \"$1\" = \"-commit-msg-file\" ] && { printf 'generated message\\n' > \"$2\"; exit 0; }\nexit 0\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	hookPath := filepath.Join(dir, "prepare-commit-msg")

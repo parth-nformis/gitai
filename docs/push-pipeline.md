@@ -7,7 +7,7 @@ with the purple spinner. A blocking failure aborts the push with the
 findings printed in the terminal; everything else pushes normally.
 
 git itself is left exactly as-is: the pipeline is an installed
-`pre-push` hook that `exec`s `gitai -prepush`. No other git behavior
+`pre-push` hook that `exec`s `gitai -pre-push`. No other git behavior
 changes.
 
 ## Gate model (off by default, per repo)
@@ -17,7 +17,7 @@ gitai, not by git config:
 
 | Command | Effect |
 |---|---|
-| `gitai -install-hook` | Installs **both** hooks (`prepare-commit-msg` + `pre-push`), each backed up to `.bak` if present |
+| `gitai hook install` | Installs **both** hooks (`prepare-commit-msg` + `pre-push`), each backed up to `.bak` if present |
 | `gitai push-check enable` | Creates the marker `<git-dir>/gitai/pushcheck` — the next `git push` runs the pipeline |
 | `gitai push-check disable` | Removes the marker — pushes pass silently again |
 

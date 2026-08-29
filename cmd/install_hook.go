@@ -22,7 +22,7 @@ import (
 func hookScript(binPath, hookPath string) string {
 	return fmt.Sprintf(`#!/bin/sh
 # gitai prepare-commit-msg hook - auto-generates a commit message.
-# Installed by `+"`gitai -install-hook`"+`. Remove with: rm %s
+# Installed by `+"`gitai hook install`"+`. Remove with: rm %s
 [ -n "$2" ] && exit 0        # source set (-m/merge/template) -> leave alone
 # git pre-fills $1 with its default "# ..." comment block, so bail only
 # when the file already holds a real, non-comment line.
@@ -31,7 +31,7 @@ grep -qEv '^[[:space:]]*(#|$)' "$1" 2>/dev/null && exit 0
 # "gitai hook: ..." warnings are written there, so the user sees the
 # work happening instead of a silent wait. When stderr is not a TTY,
 # gitai degrades to a single static line.
-"%s" -hook "$1" || exit 0
+"%s" -commit-msg-file "$1" || exit 0
 exit 0
 `, hookPath, binPath)
 }
@@ -44,8 +44,8 @@ exit 0
 func prePushHookScript(binPath, hookPath string) string {
 	return fmt.Sprintf(`#!/bin/sh
 # gitai pre-push hook - runs the check pipeline on the pushed files.
-# Installed by `+"`gitai -install-hook`"+`. Remove with: rm %s
-exec "%s" -prepush "$1"
+# Installed by `+"`gitai hook install`"+`. Remove with: rm %s
+exec "%s" -pre-push "$1"
 `, hookPath, binPath)
 }
 
@@ -100,7 +100,7 @@ func installHook() {
 
 	fmt.Println()
 	fmt.Println("Both features are OFF by default for this repo:")
-	fmt.Println("  AI commit messages: gitai -commitmsg-on  /  gitai -commitmsg-off")
+	fmt.Println("  AI commit messages: gitai commit-msg enable  /  gitai commit-msg disable")
 	fmt.Println("  Push checks:        gitai push-check enable  /  gitai push-check disable")
 }
 

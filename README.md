@@ -194,15 +194,15 @@ Edit the files and the next `gitai` run picks them up — no rebuild needed. If 
 
 ### Git hooks
 
-`gitai -install-hook` installs **two** hooks in the current repo (existing
+`gitai hook install` installs **two** hooks in the current repo (existing
 hooks are backed up to `.bak` first). Both are off by default and toggle
 per repo, stored in the repo's `.git/` (never in git config):
 
 ```bash
-gitai -install-hook        # install both hooks (generic, per repo)
+gitai hook install         # install both hooks (generic, per repo)
 
 # 1) AI commit messages (prepare-commit-msg hook)
-gitai -commitmsg-on        # turn AI commit messages ON for this repo
+gitai commit-msg enable    # turn AI commit messages ON for this repo
 git commit                 # editor opens pre-filled
 
 # 2) Push checks (pre-push hook)
@@ -265,9 +265,9 @@ gitai/
 │   ├── main.go          # Flags, task dispatch, model resolution, auto-commit
 │   ├── update.go        # Self-update handler
 │   ├── uninstall.go     # Uninstall handler
-│   ├── install_hook.go  # `gitai -install-hook`: writes both hooks (prepare-commit-msg + pre-push)
-│   ├── hook_toggle.go   # Per-repo feature toggles (`-commitmsg-on/-off`, `push-check enable|disable`)
-│   └── push_check.go    # `-prepush` mode: ref parsing, option loading, step report
+│   ├── install_hook.go  # `gitai hook install`: writes both hooks (prepare-commit-msg + pre-push)
+│   ├── hook_toggle.go   # Per-repo feature toggles (`commit-msg`/`push-check` enable|disable)
+│   └── push_check.go    # `-pre-push` mode: ref parsing, option loading, step report
 ├── client/              # HTTP client for OpenAI-compatible APIs
 │   ├── client.go        # Client struct (api_base, api_key, model, http client)
 │   ├── api_call.go      # API call logic, thinking + reasoning mode, auto-fallback
@@ -302,6 +302,26 @@ gitai/
 
 Adding a new feature = one `commands/<feature>.go` file (implement `Name`, `Diff`, `Run`),
 one default prompt in `prompts/`, and one flag in `cmd/main.go`.
+
+## Design notes (scalability)
+
+The package graph is layered and acyclic — nothing imports "upward":
+
+```
+cmd  →  commands  →  client / diffprep / git / prompts  →  spinner, config
+```
+
+- **New AI feature** = handler in `commands/` + default prompt in `prompts/`
+  + one flag (see [docs/extending.md](docs/extending.md)).
+- **New hook feature** = per-repo marker in `<git-dir>/gitai/` + hook script
+  + a mode function; the toggle plumbing (`isFeatureOn`, marker helpers in
+  `cmd/hook_toggle.go`) is name-parameterized, so a third feature adds no
+  shared code.
+- **Watch points (no action needed yet):** `cmd/` accumulates the shared
+  hook plumbing (marker paths, script writing, `.bak` backups) — at a third
+  hook feature, extract that into a `hook/` package. `loadPushCheckOptions`
+  reads the `pushchecks` config block by string keys — worth a typed struct
+  if per-language tool config grows.
 
 ## License
 

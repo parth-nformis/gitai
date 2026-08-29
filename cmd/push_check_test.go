@@ -48,13 +48,13 @@ func TestHookRemoteName(t *testing.T) {
 	old := os.Args
 	defer func() { os.Args = old }()
 
-	os.Args = []string{"gitai", "-prepush", "upstream"}
+	os.Args = []string{"gitai", "-pre-push", "upstream"}
 	if got := hookRemoteName(); got != "upstream" {
 		t.Errorf("hookRemoteName() = %q, want upstream", got)
 	}
 
 	// No forward: default to origin.
-	os.Args = []string{"gitai", "-prepush"}
+	os.Args = []string{"gitai", "-pre-push"}
 	if got := hookRemoteName(); got != "origin" {
 		t.Errorf("hookRemoteName() = %q, want origin", got)
 	}

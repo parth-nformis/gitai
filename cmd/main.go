@@ -23,19 +23,35 @@ const (
 )
 
 func main() {
-	// --- Subcommand-style toggles (handled before flag parsing) ---
-	// `gitai push-check enable|disable` toggles the push pipeline for the
-	// current repo; handled here so the bare word is never parsed as a flag.
-	if len(os.Args) >= 2 && os.Args[1] == "push-check" {
-		if len(os.Args) == 3 && os.Args[2] == "enable" {
-			toggleFeature("pushcheck", true)
-		} else if len(os.Args) == 3 && os.Args[2] == "disable" {
-			toggleFeature("pushcheck", false)
-		} else {
-			fmt.Println("Usage: gitai push-check enable|disable")
+	// --- Repo-scoped subcommands (handled before flag parsing) ---
+	// `gitai <feature> <verb>` manages this repo's state (hook install,
+	// per-repo feature toggles). Handled here so the bare words are never
+	// parsed as flags, and so they need no API config.
+	if len(os.Args) >= 3 {
+		switch os.Args[1] {
+		case "hook":
+			if os.Args[2] == "install" {
+				installHook()
+				return
+			}
+			fmt.Fprintln(os.Stderr, "Usage: gitai hook install")
+			os.Exit(1)
+		case "commit-msg", "push-check":
+			name := "commitmsg"
+			if os.Args[1] == "push-check" {
+				name = "pushcheck"
+			}
+			if os.Args[2] == "enable" {
+				toggleFeature(name, true)
+				return
+			}
+			if os.Args[2] == "disable" {
+				toggleFeature(name, false)
+				return
+			}
+			fmt.Fprintf(os.Stderr, "Usage: gitai %s enable|disable\n", os.Args[1])
 			os.Exit(1)
 		}
-		return
 	}
 
 	// --- Read CLI flags ---
@@ -46,11 +62,8 @@ func main() {
 	prFlag := flag.Bool("pr", false, "Alias for --pullreq")
 	updateFlag := flag.Bool("update", false, "Update gitai to the latest version")
 	uninstallFlag := flag.Bool("uninstall", false, "Uninstall gitai from the system")
-	installHookFlag := flag.Bool("install-hook", false, "Install the prepare-commit-msg git hook in this repo")
-	hookFile := flag.String("hook", "", "Hook mode: generate a commit message from the staged diff and write it to this file")
-	commitMsgOnFlag := flag.Bool("commitmsg-on", false, "Enable AI commit messages for this repo (per-repo hook feature)")
-	commitMsgOffFlag := flag.Bool("commitmsg-off", false, "Disable AI commit messages for this repo (per-repo hook feature)")
-	prePushFlag := flag.Bool("prepush", false, "Pre-push hook mode: run the check pipeline on the pushed files (refs read from stdin)")
+	hookFile := flag.String("commit-msg-file", "", "Hook mode: generate a commit message from the staged diff and write it to this file (internal, used by the installed hook)")
+	prePushFlag := flag.Bool("pre-push", false, "Pre-push hook mode: run the check pipeline on the pushed files (internal, used by the installed hook)")
 	thinkFlag := flag.Bool("think", false, "Enable extended thinking mode (overrides config)")
 	reasonFlag := flag.String("reason", "", "Muse Glimmer reasoning strength: low|medium|high|xhigh")
 	branchFlag := flag.String("branch", "main", "Base branch for PR diff (also -b)")
@@ -61,6 +74,11 @@ func main() {
 
 	flag.Usage = func() {
 		fmt.Println(`gitai - AI-assisted git commits, messages, PRs, and code reviews
+
+Repo commands (per-repo state):
+  gitai hook install                Install both git hooks in this repo
+  gitai commit-msg enable|disable   AI commit messages for this repo
+  gitai push-check enable|disable   Pre-push check pipeline for this repo
 
 Usage:
   gitai [flags]
@@ -89,18 +107,6 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 	}
 	if *updateFlag {
 		doUpdate()
-		return
-	}
-	if *installHookFlag {
-		installHook()
-		return
-	}
-	if *commitMsgOnFlag {
-		toggleFeature("commitmsg", true)
-		return
-	}
-	if *commitMsgOffFlag {
-		toggleFeature("commitmsg", false)
 		return
 	}
 	// Pre-push hook mode: its own config load (with defaults fallback) and

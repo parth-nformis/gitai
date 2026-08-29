@@ -85,7 +85,7 @@ var featureInfo = map[string]struct {
 }
 
 // toggleFeature is the shared CLI handler for the per-repo feature toggles
-// (-commitmsg-on/-commitmsg-off, push-check enable/disable). It needs no
+// (commit-msg enable|disable, push-check enable|disable). It needs no
 // API config, so it runs before config.Load like the other housekeeping
 // commands.
 func toggleFeature(name string, on bool) {
