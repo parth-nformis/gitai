@@ -1,4 +1,5 @@
-# gitai
+<img width="1429" height="445" alt="Gemini_Generated_Image_f28dkaf28dkaf28d" src="https://github.com/user-attachments/assets/41e9dfda-ff7f-49ca-9351-1de16c99393b" />
+
 
 AI-assisted git commits, code reviews, and pull request descriptions. Analyzes your staged changes (or branch diffs) and generates conventional commit messages, code reviews, or PR descriptions using **any OpenAI-compatible API** — vLLM, Ollama, OpenAI, LiteLLM, Groq, and more.
 
