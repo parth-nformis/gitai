@@ -1,9 +1,11 @@
 package pipeline
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -104,7 +106,13 @@ func runStep(lang Language, kind string, tool Tool, files []string, opts Options
 	sp := spinner.Start(label)
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), stepTimeout)
-	out, runErr := exec.CommandContext(ctx, tool.Bin, resolveArgs(tool.Args, files)...).CombinedOutput()
+	var out []byte
+	var runErr error
+	if tool.PerDirectory {
+		out, runErr = runPerDirectory(ctx, tool, files)
+	} else {
+		out, runErr = exec.CommandContext(ctx, tool.Bin, resolveArgs(tool.Args, files)...).CombinedOutput()
+	}
 	cancel()
 	sp.Stop()
 	step.Duration = time.Since(start)
@@ -162,6 +170,53 @@ func resolveArgs(args []string, files []string) []string {
 		out = append(out, files...)
 	}
 	return out
+}
+
+// dirGroup is one directory plus the pushed files that live in it. A
+// per-directory tool gets one call per group, since such a tool can only
+// check files that all share a directory in a single invocation.
+type dirGroup struct {
+	dir   string
+	files []string
+}
+
+// groupFilesByDir groups file paths by their parent directory. Order is
+// stable: directories appear in the order they are first encountered, and
+// files within a group keep their input order.
+func groupFilesByDir(files []string) []dirGroup {
+	index := map[string]int{}
+	var groups []dirGroup
+	for _, f := range files {
+		d := filepath.Dir(f)
+		i, ok := index[d]
+		if !ok {
+			i = len(groups)
+			index[d] = i
+			groups = append(groups, dirGroup{dir: d})
+		}
+		groups[i].files = append(groups[i].files, f)
+	}
+	return groups
+}
+
+// runPerDirectory runs a per-directory tool once per distinct directory the
+// files span, concatenating each run's output. It returns the combined
+// output plus a non-nil error if any run exited non-zero, so the caller's
+// existing failed/affected logic applies to the whole step as one unit.
+// The shared ctx bounds the whole step (all directories together) to
+// stepTimeout, so a large push can never push a per-directory step past it.
+func runPerDirectory(ctx context.Context, tool Tool, files []string) ([]byte, error) {
+	var buf bytes.Buffer
+	var runErr error
+	for _, g := range groupFilesByDir(files) {
+		out, err := exec.CommandContext(ctx, tool.Bin, resolveArgs(tool.Args, g.files)...).CombinedOutput()
+		buf.Write(out)
+		buf.WriteByte('\n')
+		if err != nil && runErr == nil {
+			runErr = err
+		}
+	}
+	return buf.Bytes(), runErr
 }
 
 // Blocked reports whether any step in steps blocks the push: a format

@@ -150,6 +150,25 @@ golangci-lint, ruff, eslint, shellcheck, and yamllint output styles).
 files, so their registry entries carry `FailOnOut` — non-empty output
 means failure regardless of exit code.
 
+### Per-directory linters
+
+golangci-lint's "named files" mode type-checks a **single package**, so one
+call naming files from two different directories aborts before linting
+anything:
+
+```
+level=error msg="typechecking error: named files must all be in one directory"
+```
+
+Left unhandled, that abort is a non-zero exit naming no file, so the step
+would degrade to a `tool-error` skip and a multi-directory push would never
+be linted at all. The registry therefore marks such a tool with
+`PerDirectory` (currently only `golangci-lint`), and `runStep` groups the
+pushed files by directory (`groupFilesByDir`) and runs the tool **once per
+directory**, concatenating the output. Each per-directory run shares the
+step's 5-minute budget, and findings are counted across the combined
+output — so the threshold math and the tool-error guard are unchanged.
+
 ## Configuration
 
 All knobs live in the `pushchecks` block of `~/.gitai/gitai.json`
@@ -210,6 +229,8 @@ blocked **only** by real check failures:
   case-insensitivity.
 - `pipeline/run_test.go` — threshold table, affected-file counting per
   tool output style, tool-error path, missing-tool skip, disabled steps,
-  `FailOnOut` contract, and a full fake-tool end-to-end run.
+  `FailOnOut` contract, per-directory grouping (`groupFilesByDir`) and
+  per-directory execution (`runPerDirectory`), and a full fake-tool
+  end-to-end run.
 - `cmd/hook_toggle_test.go` — per-repo marker on/off, idempotency, and
   independence of the two feature markers.
