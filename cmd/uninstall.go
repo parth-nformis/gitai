@@ -5,16 +5,12 @@ import (
 	"os"
 )
 
-// uninstall deletes the gitai binary. Requires root.
+// uninstall deletes the gitai binary it is running from; no privileges
+// needed unless it lives in a root-owned directory.
 func uninstall() {
 	execPath, err := os.Executable()
 	if err != nil {
 		fmt.Printf("Could not determine binary path: %v\n", err)
-		os.Exit(1)
-	}
-
-	if os.Geteuid() != 0 {
-		fmt.Printf("Cannot uninstall: not running as root.\nRun: sudo %s -uninstall\n", execPath)
 		os.Exit(1)
 	}
 

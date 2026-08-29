@@ -30,8 +30,10 @@ git clone -q --depth 1 https://github.com/parthdande/gitai.git "$TEMP_BUILD_DIR"
     go build -o gitai ./cmd
 )
 
-# Install destination
-DEST_DIR="/usr/local/bin"
+# Install destination: per-user, so no sudo is needed and `gitai
+# -update` can swap the binary in place without a password prompt.
+DEST_DIR="$HOME/.local/bin"
+mkdir -p "$DEST_DIR"
 
 # Create config directory and default config file
 CONFIG_DIR="$HOME/.gitai"
@@ -48,7 +50,7 @@ EOF
     echo " Created config file at $CONFIG_DIR/gitai.json"
 fi
 
-if sudo mv "$TEMP_BUILD_DIR/gitai" "$DEST_DIR/gitai"; then
+if mv "$TEMP_BUILD_DIR/gitai" "$DEST_DIR/gitai"; then
     # Clean up the temp directory
     rm -rf "$TEMP_BUILD_DIR"
     echo "--------------------------------------------------------"
@@ -68,7 +70,7 @@ if sudo mv "$TEMP_BUILD_DIR/gitai" "$DEST_DIR/gitai"; then
 else
     # Clean up the temp directory
     rm -rf "$TEMP_BUILD_DIR"
-    echo "Failed to install binary to $DEST_DIR. Make sure you have sudo privileges."
+    echo "Failed to install binary to $DEST_DIR. Check that you can write to it."
     exit 1
 fi
 

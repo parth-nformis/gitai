@@ -40,7 +40,7 @@ gitai -pullreq
 bash <(curl -s https://raw.githubusercontent.com/parthdande/gitai/main/install.sh)
 ```
 
-Clones the latest code, builds in a temp directory, and installs the binary to `/usr/local/bin`. Config at `~/.gitai/` is preserved across installs.
+Clones the latest code, builds in a temp directory, and installs the binary to `~/.local/bin` (no sudo needed). Config at `~/.gitai/` is preserved across installs.
 
 ### Manual
 
@@ -48,7 +48,7 @@ Clones the latest code, builds in a temp directory, and installs the binary to `
 git clone https://github.com/parthdande/gitai.git
 cd gitai
 go build -o gitai ./cmd
-sudo mv gitai /usr/local/bin/
+mkdir -p ~/.local/bin && mv gitai ~/.local/bin/
 ```
 
 ### Update
@@ -60,7 +60,7 @@ gitai -update
 ### Uninstall
 
 ```bash
-sudo gitai -uninstall
+gitai -uninstall
 ```
 
 ---
@@ -333,7 +333,7 @@ gitai/
 │   └── pullreq.go       # Default pullreq system prompt
 ├── spinner/             # Purple braille-dot loading spinner shown while the AI runs
 │   └── spinner.go       # Start/Stop/Note; TTY-aware, writes to stderr only
-└── install.sh           # Automated install: clone, build, install to /usr/local/bin
+└── install.sh           # Automated install: clone, build, install to ~/.local/bin
 ```
 
 Adding a new feature = one `commands/<feature>.go` file (implement `Name`, `Diff`, `Run`),
