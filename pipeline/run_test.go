@@ -269,3 +269,25 @@ func TestRunPerDirectory(t *testing.T) {
 		t.Errorf("calls = %q, want %q", lines, want)
 	}
 }
+
+// TestRunPerDirectoryFindings proves findings are counted across the combined
+// multi-directory output: one directory has a finding and the other is clean,
+// and the step must fail with exactly the affected file counted.
+func TestRunPerDirectoryFindings(t *testing.T) {
+	dir := t.TempDir()
+	// Reports a finding for any argument containing "bad" and exits 1; a
+	// directory with none reports clean and exits 0.
+	fakeTool(t, dir, "linttool", "#!/bin/sh\nfound=0\nfor f in \"$@\"; do\n  case \"$f\" in *bad*) echo \"$f:1:1: finding\"; found=1;; esac\ndone\n[ \"$found\" -eq 1 ] && exit 1\nexit 0\n")
+	orig := os.Getenv("PATH")
+	t.Setenv("PATH", dir+string(filepath.ListSeparator)+orig)
+
+	tool := Tool{Name: "linttool", Bin: "linttool", Args: []string{"run", "{files}"}, PerDirectory: true}
+	// a/bad.go has a finding; b/good.go does not. Two directories.
+	step := runStep(LangGo, "lint", tool, []string{"a/bad.go", "b/good.go"}, Options{Lint: true})
+	if step.Status != StatusFail {
+		t.Fatalf("step = %v, want fail (a/bad.go has a finding)", step.Status)
+	}
+	if step.Affected != 1 || step.Total != 2 {
+		t.Errorf("affected/total = %d/%d, want 1/2", step.Affected, step.Total)
+	}
+}
