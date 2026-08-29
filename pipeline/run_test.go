@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -89,6 +90,18 @@ func TestResolveArgs(t *testing.T) {
 	}
 	if got := resolveArgs([]string{"run", "--all"}, []string{"a.go"}); !reflect.DeepEqual(got, []string{"run", "--all", "a.go"}) {
 		t.Errorf("append when no placeholder = %v", got)
+	}
+}
+
+func TestGroupFilesByDir(t *testing.T) {
+	groups := groupFilesByDir([]string{"a/x.go", "b/y.go", "a/z.go", "top.go"})
+	want := []dirGroup{
+		{dir: "a", files: []string{"a/x.go", "a/z.go"}},
+		{dir: "b", files: []string{"b/y.go"}},
+		{dir: ".", files: []string{"top.go"}},
+	}
+	if !reflect.DeepEqual(groups, want) {
+		t.Errorf("groupFilesByDir() = %+v, want %+v", groups, want)
 	}
 }
 
@@ -222,5 +235,59 @@ func TestRunFailOnOut(t *testing.T) {
 	step = runStep(LangGo, "format", same, []string{"main.go"}, Options{Format: true})
 	if step.Status != StatusPass {
 		t.Errorf("exit-code-based step = %v, want pass", step.Status)
+	}
+}
+
+// TestRunPerDirectory pins the per-directory contract: a PerDirectory tool
+// given files spanning two directories runs once per directory, and each
+// call receives only that directory's files.
+func TestRunPerDirectory(t *testing.T) {
+	dir := t.TempDir()
+	logFile := filepath.Join(dir, "calls.txt")
+	fakeTool(t, dir, "logtool", "#!/bin/sh\necho \"CALL: $@\" >> \"$CALLLOG\"\nexit 0\n")
+
+	orig := os.Getenv("PATH")
+	t.Setenv("PATH", dir+string(filepath.ListSeparator)+orig)
+	t.Setenv("CALLLOG", logFile)
+
+	tool := Tool{Name: "logtool", Bin: "logtool", Args: []string{"run", "{files}"}, PerDirectory: true}
+	step := runStep(LangGo, "lint", tool, []string{"a/x.go", "b/y.go", "a/z.go"}, Options{Lint: true})
+	if step.Status != StatusPass {
+		t.Fatalf("step = %v, want pass", step.Status)
+	}
+
+	data, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("read call log: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	want := []string{
+		"CALL: run a/x.go a/z.go",
+		"CALL: run b/y.go",
+	}
+	if !reflect.DeepEqual(lines, want) {
+		t.Errorf("calls = %q, want %q", lines, want)
+	}
+}
+
+// TestRunPerDirectoryFindings proves findings are counted across the combined
+// multi-directory output: one directory has a finding and the other is clean,
+// and the step must fail with exactly the affected file counted.
+func TestRunPerDirectoryFindings(t *testing.T) {
+	dir := t.TempDir()
+	// Reports a finding for any argument containing "bad" and exits 1; a
+	// directory with none reports clean and exits 0.
+	fakeTool(t, dir, "linttool", "#!/bin/sh\nfound=0\nfor f in \"$@\"; do\n  case \"$f\" in *bad*) echo \"$f:1:1: finding\"; found=1;; esac\ndone\n[ \"$found\" -eq 1 ] && exit 1\nexit 0\n")
+	orig := os.Getenv("PATH")
+	t.Setenv("PATH", dir+string(filepath.ListSeparator)+orig)
+
+	tool := Tool{Name: "linttool", Bin: "linttool", Args: []string{"run", "{files}"}, PerDirectory: true}
+	// a/bad.go has a finding; b/good.go does not. Two directories.
+	step := runStep(LangGo, "lint", tool, []string{"a/bad.go", "b/good.go"}, Options{Lint: true})
+	if step.Status != StatusFail {
+		t.Fatalf("step = %v, want fail (a/bad.go has a finding)", step.Status)
+	}
+	if step.Affected != 1 || step.Total != 2 {
+		t.Errorf("affected/total = %d/%d, want 1/2", step.Affected, step.Total)
 	}
 }

@@ -15,6 +15,11 @@ type Tool struct {
 	FailOnOut bool     // true when a non-zero exit is NOT the failure signal:
 	// gofmt and shfmt -d exit 0 while still reporting findings, so a
 	// non-empty output is what makes the step fail for them.
+	PerDirectory bool // true when the tool can only check files from a single
+	// directory in one call. golangci-lint's "named files" mode type-checks
+	// one package, so a call naming files from two directories aborts before
+	// linting anything; such tools get the pushed files grouped by directory
+	// and are run once per directory instead of once with the flat list.
 }
 
 // Checks holds the configured formatter + linter for one language.
@@ -33,7 +38,7 @@ var DefaultChecks = []Checks{
 	{
 		Language:  LangGo,
 		Formatter: Tool{Name: "gofmt", Bin: "gofmt", Args: []string{"-l", "{files}"}, FailOnOut: true},
-		Linter:    Tool{Name: "golangci-lint", Bin: "golangci-lint", Args: []string{"run", "{files}"}},
+		Linter:    Tool{Name: "golangci-lint", Bin: "golangci-lint", Args: []string{"run", "{files}"}, PerDirectory: true},
 	},
 	{
 		Language:  LangPython,
