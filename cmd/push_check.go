@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/parthdande/gitai/config"
 	"github.com/parthdande/gitai/git"
@@ -44,11 +43,12 @@ func runPrePush() {
 	if len(steps) == 0 {
 		os.Exit(0) // no supported language in the push
 	}
+	target := pushTarget(pairs, hookRemoteName())
 	if pipeline.Blocked(steps, opts) {
-		printPushReport(files, steps, opts, true)
+		printPushReport(os.Stdout, steps, opts.Threshold, true, target)
 		os.Exit(1)
 	}
-	printPushReport(files, steps, opts, false)
+	printPushReport(os.Stdout, steps, opts.Threshold, false, target)
 	os.Exit(0)
 }
 
@@ -67,7 +67,7 @@ func readPushRefs(r io.Reader) ([]git.RefPair, error) {
 		if len(f) < 4 {
 			continue
 		}
-		pairs = append(pairs, git.RefPair{LocalSHA: f[1], RemoteSHA: f[3]})
+		pairs = append(pairs, git.RefPair{LocalRef: f[0], LocalSHA: f[1], RemoteRef: f[2], RemoteSHA: f[3]})
 	}
 	if err := sc.Err(); err != nil {
 		return nil, err
@@ -123,92 +123,99 @@ func loadPushCheckOptions() pipeline.Options {
 	return opts
 }
 
-// printPushReport renders the per-step report. blocked is passed so the
-// summary line matches the exit decision made in runPrePush.
-func printPushReport(files []string, steps []pipeline.Step, opts pipeline.Options, blocked bool) {
-	langs := pipeline.DetectLanguages(files)
-	names := make([]string, len(langs))
-	for i, l := range langs {
-		names[i] = string(l)
-	}
-	unit := "files"
-	if len(files) == 1 {
-		unit = "file"
-	}
-	fmt.Printf("gitai push-checks (%d %s: %s)\n", len(files), unit, strings.Join(names, ", "))
-
-	skipped := 0
-	for _, s := range steps {
-		switch s.Status {
-		case pipeline.StatusPass:
-			fmt.Printf("  ✓ %s %s (%s)\n", s.Kind, s.Tool, dur(s.Duration))
-		case pipeline.StatusFail:
-			line := fmt.Sprintf("  ✗ %s %s (%s)", s.Kind, s.Tool, dur(s.Duration))
-			if s.Kind == "lint" {
-				line += fmt.Sprintf(" — %d of %d checked files have findings", s.Affected, s.Total)
-			}
-			fmt.Println(line)
-			for _, l := range capLines(s.Output, 20) {
-				fmt.Printf("      %s\n", l)
-			}
-			if s.Kind == "format" {
-				fmt.Println("      format failure blocks the push (fix the files or set pushchecks.format to false)")
-			} else if !pipeline.LintBlocked(s.Affected, s.Total, opts.Threshold) {
-				fmt.Printf("      below the %d%% threshold — warning only\n", opts.Threshold)
-			}
-		case pipeline.StatusSkipMissing:
-			skipped++
-			fmt.Printf("  ⚠ %s %s not installed — skipped (install it to enable this step)\n", s.Kind, s.Tool)
-		case pipeline.StatusToolError:
-			skipped++
-			fmt.Printf("  ⚠ %s %s failed to run — tool error, not counted\n", s.Kind, s.Tool)
-			for _, l := range capLines(strings.TrimRight(s.Output, "\n"), 5) {
-				fmt.Printf("      %s\n", l)
-			}
-		}
-	}
-
-	lintWarned := false
-	for _, s := range steps {
-		if s.Kind == "lint" && s.Status == pipeline.StatusFail && !pipeline.LintBlocked(s.Affected, s.Total, opts.Threshold) {
-			lintWarned = true
-		}
-	}
-
-	fmt.Println()
+// printPushReport renders the compact check report: a verdict that answers
+// "did the push go out?" on line 1, a one-line check table, and a count
+// line for each blocking failure. Raw tool output is never shown — the
+// user can re-run the tool for details.
+func printPushReport(w io.Writer, steps []pipeline.Step, threshold int, blocked bool, target string) {
+	verdict := "✓ Push passed"
 	switch {
 	case blocked:
-		fmt.Println("Push blocked: fix the findings above and push again.")
-	case lintWarned:
-		if skipped > 0 {
-			fmt.Printf("Push allowed: lint findings below the %d%% threshold (%d steps skipped).\n", opts.Threshold, skipped)
-		} else {
-			fmt.Printf("Push allowed: lint findings below the %d%% threshold.\n", opts.Threshold)
+		verdict = "✗ Push blocked"
+	case lintUnderThreshold(steps, threshold):
+		verdict = "⚠ Push allowed with findings"
+	}
+	if target != "" {
+		verdict += " · " + target
+	}
+	fmt.Fprintln(w, verdict)
+
+	entries := make([]string, 0, len(steps))
+	for _, s := range steps {
+		entries = append(entries, tableEntry(s, threshold))
+	}
+	fmt.Fprintf(w, "  %s\n", strings.Join(entries, "   "))
+
+	for _, s := range steps {
+		switch {
+		case s.Status == pipeline.StatusFail && s.Kind == "format":
+			fmt.Fprintf(w, "  %s: unformatted files found\n", s.Tool)
+		case s.Status == pipeline.StatusFail && pipeline.LintBlocked(s.Affected, s.Total, threshold):
+			fmt.Fprintf(w, "  %s: %d of %d files have findings\n", s.Tool, s.Affected, s.Total)
+		case s.Status == pipeline.StatusToolError:
+			fmt.Fprintf(w, "  %s: tool error, not counted\n", s.Tool)
 		}
-	case skipped > 0:
-		fmt.Printf("Checks passed (%d steps skipped).\n", skipped)
+	}
+}
+
+// tableEntry renders one check-table cell: the tool name plus its outcome
+// mark.
+func tableEntry(s pipeline.Step, threshold int) string {
+	switch s.Status {
+	case pipeline.StatusPass:
+		return s.Tool + " ✓"
+	case pipeline.StatusFail:
+		if s.Kind == "format" || pipeline.LintBlocked(s.Affected, s.Total, threshold) {
+			return s.Tool + " ✗"
+		}
+		return fmt.Sprintf("%s ⚠ (%d of %d files)", s.Tool, s.Affected, s.Total)
+	case pipeline.StatusToolError:
+		return s.Tool + " error"
 	default:
-		fmt.Println("All checks passed.")
+		return s.Tool + " skip"
 	}
 }
 
-func dur(d time.Duration) string {
-	if d < time.Second {
-		return fmt.Sprintf("%dms", d.Milliseconds())
+// lintUnderThreshold reports whether a lint step failed but stayed below
+// the blocking threshold — the amber "allowed with findings" verdict.
+func lintUnderThreshold(steps []pipeline.Step, threshold int) bool {
+	for _, s := range steps {
+		if s.Kind == "lint" && s.Status == pipeline.StatusFail && !pipeline.LintBlocked(s.Affected, s.Total, threshold) {
+			return true
+		}
 	}
-	return d.Round(time.Millisecond).String()
+	return false
 }
 
-// capLines trims output to n lines for the terminal report, noting how much
-// was cut so nothing looks silently swallowed.
-func capLines(s string, n int) []string {
-	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
-	if len(lines) == 0 {
-		return nil
+// pushTarget renders the "test → origin/test" target shown after the
+// verdict. Multiple refs collapse to the bare remote name; deletion refs
+// contribute nothing.
+func pushTarget(pairs []git.RefPair, remote string) string {
+	var refs []git.RefPair
+	for _, p := range pairs {
+		if p.LocalRef != "" && p.LocalRef != "(delete)" {
+			refs = append(refs, p)
+		}
 	}
-	if len(lines) > n {
-		out := append(lines[:n], fmt.Sprintf("… (%d more lines)", len(lines)-n))
-		return out
+	if len(refs) == 0 {
+		return ""
 	}
-	return lines
+	if len(refs) == 1 {
+		return fmt.Sprintf("%s → %s/%s", shortRef(refs[0].LocalRef), remote, shortRef(refs[0].RemoteRef))
+	}
+	names := make([]string, len(refs))
+	for i, p := range refs {
+		names[i] = shortRef(p.LocalRef)
+	}
+	return fmt.Sprintf("%s → %s", strings.Join(names, ", "), remote)
+}
+
+// shortRef strips a ref's namespace: refs/heads/test → test,
+// refs/tags/v1.0 → v1.0.
+func shortRef(ref string) string {
+	rest := strings.TrimPrefix(ref, "refs/")
+	if i := strings.Index(rest, "/"); i > 0 {
+		return rest[i+1:]
+	}
+	return rest
 }

@@ -8,7 +8,9 @@ import (
 
 // RefPair is one ref being pushed, from the pre-push hook's stdin.
 type RefPair struct {
+	LocalRef  string // e.g. refs/heads/test, or "(delete)" for a ref deletion
 	LocalSHA  string
+	RemoteRef string
 	RemoteSHA string // all zeros when the remote ref is being created
 }
 

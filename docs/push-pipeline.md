@@ -4,7 +4,8 @@
 the remote, a check pipeline runs over **only the files in the push** —
 one formatter and one linter per detected language, each step shown live
 with the purple spinner. A blocking failure aborts the push with the
-findings printed in the terminal; everything else pushes normally.
+verdict printed first in the terminal output; everything else pushes
+normally.
 
 git itself is left exactly as-is: the pipeline is an installed
 `pre-push` hook that `exec`s `gitai -pre-push`. No other git behavior
@@ -45,7 +46,7 @@ flowchart TD
     I --> I1["DetectLanguages(files)\npipeline/detect.go\nby extension, fixed registry order"]
     I1 --> I2["runStep() per language × format,lint\nspinner.Start(label)\nexec.CommandContext, 5-min cap"]
     I2 --> I3{"tool installed?"}
-    I3 -- no --> S1["StatusSkipMissing\n⚠ shown, never blocks"]
+    I3 -- no --> S1["StatusSkipMissing\n'skip' in the check table, never blocks"]
     I3 -- yes --> I4{"findings?"}
     I4 -- "lint, none name a file" --> S2["StatusToolError\nlinter crashed — shown, never blocks"]
     I4 -- pass --> S3["StatusPass ✓"]
@@ -54,7 +55,7 @@ flowchart TD
     J --> J1["any format failure → block immediately"]
     J --> J2["lint blocks only when\nLintBlocked(affected, total, threshold)\n≥ threshold% of checked files, 0 = any"]
     J1 & J2 --> K{"blocked?"}
-    K -- yes --> Z2["printPushReport(..., true)\nexit 1 — push aborted, findings in terminal"]
+    K -- yes --> Z2["printPushReport(..., true)\nexit 1 — push aborted, compact report in terminal"]
     K -- no --> Z3["printPushReport(..., false)\nexit 0 — push proceeds"]
 ```
 
@@ -112,7 +113,7 @@ runs a **format step then a lint step** per language. Each step:
 | `fail` | real findings / format problem | format: **always** · lint: only at the threshold |
 | `skip-missing` | tool not installed | no |
 | `skip-disabled` | step switched off in config | no (not even reported) |
-| `tool-error` | linter exited non-zero **without naming any file** (bad config, Go-version mismatch, ...) | no — shown with its output |
+| `tool-error` | linter exited non-zero **without naming any file** (bad config, Go-version mismatch, ...) | no — shown as `error` in the check table |
 
 The `tool-error` status exists because a crashed linter must not be
 counted as "one file with findings": on a two-file push that fabricated
@@ -129,8 +130,8 @@ files** the linter output names
 golangci-lint, ruff, eslint, shellcheck, and yamllint output styles).
 
 - Default threshold: **50** — half or more of the checked files must have
-  findings before the push is blocked; below that the report shows
-  "Push allowed: lint findings below the 50% threshold."
+  findings before the push is blocked; below that the verdict reads
+  "⚠ Push allowed with findings".
 - `threshold: 0` — **any** finding blocks.
 - Format failures have no threshold: an unformatted file blocks
   immediately (the spec: only push once format is clean).
@@ -168,6 +169,31 @@ pushed files by directory (`groupFilesByDir`) and runs the tool **once per
 directory**, concatenating the output. Each per-directory run shares the
 step's 5-minute budget, and findings are counted across the combined
 output — so the threshold math and the tool-error guard are unchanged.
+
+## Report
+
+The pre-push output is deliberately compact — line 1 answers "did the
+push go out?", the next line is the check table, and detail appears only
+when it matters:
+
+```
+✓ Push passed · test → origin/test
+  gofmt ✓   golangci-lint ✓   prettier skip   yamllint skip
+
+⚠ Push allowed with findings · test → origin/test
+  gofmt ✓   golangci-lint ⚠ (1 of 5 files)
+
+✗ Push blocked · test → origin/test
+  gofmt ✓   golangci-lint ✗
+  golangci-lint: 3 of 5 files have findings
+```
+
+Table marks: `✓` pass · `✗` blocked · `⚠` lint findings under the
+threshold · `skip` tool not installed or step disabled · `error` linter
+crashed (shown, never counted, with a "tool error, not counted" line).
+Raw tool output is never printed — the user re-runs the tool for
+details. Multi-ref pushes collapse to `test, main → origin`; ref
+deletions are omitted from the target.
 
 ## Configuration
 
@@ -220,8 +246,9 @@ blocked **only** by real check failures:
 
 ## Tests
 
-- `cmd/push_check_test.go` — ref-line parsing (existing / new / deletion),
-  remote-name resolution, output capping.
+- `cmd/push_check_test.go` — ref-line parsing (existing / new / deletion,
+  including ref names), push-target rendering, report shapes, and
+  remote-name resolution.
 - `git/push_files_test.go` — file-list semantics on real temp repos:
   existing ref, ref deletion, new ref (merge-base), union dedupe,
   deleted-file exclusion.
