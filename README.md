@@ -423,26 +423,6 @@ gitai/
 Adding a new feature = one `commands/<feature>.go` file (implement `Name`, `Diff`, `Run`),
 one default prompt in `prompts/`, and one flag in `cmd/main.go`.
 
-## Design notes (scalability)
-
-The package graph is layered and acyclic — nothing imports "upward":
-
-```
-cmd  →  commands  →  client / diffprep / git / prompts  →  spinner, config
-```
-
-- **New AI feature** = handler in `commands/` + default prompt in `prompts/`
-  + one flag (see [docs/extending.md](docs/extending.md)).
-- **New hook feature** = per-repo marker in `<git-dir>/gitai/` + hook script
-  + a mode function; the toggle plumbing (`isFeatureOn`, marker helpers in
-  `cmd/hook_toggle.go`) is name-parameterized, so a third feature adds no
-  shared code.
-- **Watch points (no action needed yet):** `cmd/` accumulates the shared
-  hook plumbing (marker paths, script writing, `.bak` backups) — at a third
-  hook feature, extract that into a `hook/` package. `loadPushCheckOptions`
-  reads the `pushchecks` config block by string keys — worth a typed struct
-  if per-language tool config grows.
-
 ## License
 
 MIT
