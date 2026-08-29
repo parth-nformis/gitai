@@ -4,9 +4,7 @@ import (
 	"strings"
 )
 
-// IsMuseGlimmer reports whether the (per-call) model is Muse Glimmer.
-// Case-insensitive substring; matches "muse-glimmer", "muse-glimmer:30b",
-// "meta/muse-glimmer-30b", etc.
+// IsMuseGlimmer reports whether the model is Muse Glimmer.
 func IsMuseGlimmer(model string) bool {
 	return strings.Contains(strings.ToLower(model), "muse-glimmer")
 }

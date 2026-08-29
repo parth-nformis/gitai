@@ -292,8 +292,6 @@ func truncateFileDiff(rawDiff string, filename string, maxLines int) string {
 
 	var buf bytes.Buffer
 	buf.WriteString(strings.Join(lines[:headerLines], "\n"))
-	// fmt.Fprintf writes the formatted marker straight into the buffer
-	// (no intermediate string from Sprintf + WriteString).
 	fmt.Fprintf(&buf, "\n\\ No newline at end of file\n\\ ... %d lines of diff truncated ...\n\\ %s\n", skipped, filename)
 	buf.WriteString(strings.Join(lines[len(lines)-footerLines:], "\n"))
 
@@ -359,14 +357,7 @@ func ShouldChunk(rawDiff string) bool {
 	return lines > 500 // More than ~500 lines = worth chunking
 }
 
-// ChunkDiff splits a raw diff into manageable chunks. Each chunk contains
-// one or more COMPLETE file diffs — a file is never split across two
-// chunks, because a partial diff (missing its header or trailing hunk)
-// is harder for the model to interpret than a slightly larger whole one.
-//
-// It greedily fills each chunk up to maxChunkLines; a single file that
-// is itself larger than the budget gets its own chunk rather than being
-// truncated here (per-file truncation is Process's job, applied later).
+// ChunkDiff splits a raw diff into manageable chunks.
 func ChunkDiff(rawDiff string, maxChunkLines int) [][]FileStats {
 	files := parseDiff(rawDiff)
 	if maxChunkLines <= 0 {
