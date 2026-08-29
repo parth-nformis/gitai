@@ -2,6 +2,11 @@
 config/gitai.json
 config.env
 gitai
+# Task/scratch notes (not part of the tool)
+tasks/
+# Editor swap files
+*.swp
+*.swo
 .pi/
 .agent/
 .context/

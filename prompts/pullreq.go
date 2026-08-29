@@ -1,7 +1,15 @@
 package prompts
 
-// DefaultPullReqSystem returns the built-in default system prompt for generating
-// PR descriptions. Used as a fallback when no custom prompt file exists.
+// DefaultPullReqSystem returns the built-in default system prompt for
+// generating PR descriptions. Used as a fallback when no custom prompt
+// file exists.
+//
+// The four sections (Summary / Changes / Testing / Breaking Changes)
+// mirror what a reviewer actually wants to know when opening a PR, in
+// the order they look for them. Like the commit prompt, markdown code
+// fences are banned because the text is pasted into PR body fields
+// that already render markdown — fences inside would create nested,
+// broken blocks.
 func DefaultPullReqSystem() string {
 	return `You are an expert software engineer. Generate a structured pull request description based on the provided git diff.
 

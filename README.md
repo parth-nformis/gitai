@@ -36,7 +36,7 @@ gitai -pullreq
 ### Automated (Linux & macOS)
 
 ```bash
-bash <(curl -s https://raw.githubusercontent.com/parth-nformis/gitai/main/install.sh)
+bash <(curl -s https://raw.githubusercontent.com/parthdande/gitai/main/install.sh)
 ```
 
 Clones the latest code, builds in a temp directory, and installs the binary to `/usr/local/bin`. Config at `~/.gitai/` is preserved across installs.
@@ -44,7 +44,7 @@ Clones the latest code, builds in a temp directory, and installs the binary to `
 ### Manual
 
 ```bash
-git clone https://github.com/parth-nformis/gitai.git
+git clone https://github.com/parthdande/gitai.git
 cd gitai
 go build -o gitai cmd/main.go
 sudo mv gitai /usr/local/bin/
@@ -78,7 +78,7 @@ Created automatically at `~/.gitai/gitai.json` on first install:
 }
 ```
 
-### Per-task Model and Thinking Mode
+### Per-task Model, Thinking, and Reasoning
 
 Assign different models and thinking settings per command:
 
@@ -103,10 +103,13 @@ Assign different models and thinking settings per command:
 | `GEMINI_API_KEY` | — | Alternative for `API_KEY` |
 
 Priority (highest to lowest):
+1. `--reason` CLI flag (reasoning only)
+2. Per-task config (`commit.model`, `commit.thinking`, `commit.reasoning`, `review.model`, ...)
+3. Global config (`model`, `reasoning`)
+4. Environment variables (`MODEL`, `API_BASE`, `API_KEY`)
 
-1. Per-task config (`commit.model`, `review.model`, `pullreq.model`)
-2. Global config (`model` key)
-3. Environment variables
+Note: for thinking, a per-task `<task>.thinking` value overrides the
+`--think` flag when both are present.
 
 ### Example Configurations
 
@@ -192,57 +195,168 @@ Or enable permanently in config per-task:
 }
 ```
 
+### Reasoning Mode (Muse Glimmer)
+
+Muse Glimmer is an always-on reasoning model: it cannot be switched
+off, only tuned. `-reason` sets the reasoning strength
+(`low | medium | high | xhigh`) and gitai injects it into the system
+prompt; it also stops sending the `enable_thinking` kwarg that the
+model ignores. On any other model, `-reason` prints a one-time warning
+and is ignored:
+
+```bash
+gitai -commitmsg -reason low
+```
+
+Or permanently in `~/.gitai/gitai.json`:
+
+```json
+{
+  "model": "Meta/Muse-Glimmer-30B",
+  "reasoning": "medium",
+  "commit": { "reasoning": "low" }
+}
+```
+
+For best results serve Muse Glimmer with `--reasoning-parser
+muse_glimmer` (vLLM) so the private chain of thought stays out of the
+output.
+
 ### Custom System Prompts
 
 Override built-in prompts by placing `.md` files in `~/.gitai/system_prompts/`:
 
 ```
 ~/.gitai/system_prompts/
-├── commit.md    # Commit message generation
-├── review.md    # Code review
-└── pullreq.md   # PR description
+├── commit.md   # Overrides commit message generation prompt
+└── review.md   # Overrides code review prompt
+```
+
+Edit the files and the next `gitai` run picks them up — no rebuild needed. If a file is missing, gitai falls back to its built-in default.
+
+### Git hooks
+
+`gitai hook install` installs **two** hooks in the current repo (existing
+hooks are backed up to `.bak` first). Both are off by default and toggle
+per repo, stored in the repo's `.git/` (never in git config):
+
+```bash
+gitai hook install         # install both hooks (generic, per repo)
+
+# 1) AI commit messages (prepare-commit-msg hook)
+gitai commit-msg enable    # turn AI commit messages ON for this repo
+git commit                 # editor opens pre-filled
+
+# 2) Push checks (pre-push hook)
+gitai push-check enable    # the next `git push` runs the check pipeline
+```
+
+**AI commit messages** only act for a bare `git commit` — they bail when a
+message was given (`-m`, merge, template) or when the message file already
+holds a real (non-comment) line (git pre-fills its default `#` comment
+block, so the guard tests for actual content, not mere non-emptiness).
+Any failure (no API, no staged changes, feature off) exits 0 so a commit
+is never blocked. The hook uses the staged diff only (it never runs
+`git add -A`). Remove it with `rm .git/hooks/prepare-commit-msg`.
+
+**Push checks** run a quality pipeline on `git push`: only the files in
+the push are checked, one formatter + one linter per detected language
+(go, python, node, shell, html, yaml), each step shown live with the
+spinner. A format failure blocks the push immediately; lint blocks only
+when findings affect ≥ 50% of the checked files (configurable, `0` = any
+finding blocks). Missing tools warn and skip — they never block — and
+gitai's own failures never block a push. Tune it via the `pushchecks`
+block in `~/.gitai/gitai.json` (threshold, format/lint toggles, tool
+overrides). See [docs/push-pipeline.md](docs/push-pipeline.md) for the
+full design. Remove it with `rm .git/hooks/pre-push` (or just
+`gitai push-check disable`).
+
+Per-run AI settings can be tuned via a `hook` block in
+`~/.gitai/gitai.json` (`hook.model`, `hook.thinking`, `hook.reasoning`),
+same as any other task.
+
+### Update to Latest Version
+
+```bash
+gitai -update
 ```
 
 Changes take effect immediately — no rebuild needed. Missing files fall back to built-in defaults.
 
 ---
 
+## Documentation
+
+In-depth documentation with diagrams lives in [`docs/`](docs/README.md) —
+architecture, per-feature flows, diff preprocessing, the API client,
+configuration, and how to extend gitai with new features.
+
 ## Architecture
 <img width="1093" height="1147" alt="diagram-export-09-07-2026-13_39_08" src="https://github.com/user-attachments/assets/3a0fd138-6906-464e-aafa-395fe4dbd5d3" />
 
 ```
 gitai/
-├── cmd/main.go              # CLI entry point, flag parsing, config loading
-├── client/                  # OpenAI-compatible HTTP client
-│   ├── client.go            # Client struct (api_base, api_key, model)
-│   └── api_call.go          # Streaming + non-streaming API calls, thinking mode, auto-fallback
-├── commands/                # Feature handlers
-│   ├── handler.go           # Handler interface (Name + Run)
-│   ├── commit.go            # Commit message generation
-│   ├── review.go            # Code review generation
-│   └── pullreq.go           # PR description generation
-├── config/                  # Typed configuration
-│   └── config.go            # Config and TaskConfig types
-├── diffprep/                # Diff preprocessing pipeline
-│   └── preprocess.go        # Noise filtering, file stats, truncation, chunking
-├── prompts/                 # System prompt management
-│   ├── loader.go            # Custom prompt loader with built-in fallback
-│   ├── commit.go            # Default commit prompt
-│   ├── review.go            # Default review prompt
-│   └── pullreq.go           # Default PR description prompt
-└── install.sh               # Automated install script
+├── cmd/                 # CLI entry point
+│   ├── main.go          # Flags, task dispatch, model resolution, auto-commit
+│   ├── update.go        # Self-update handler
+│   ├── uninstall.go     # Uninstall handler
+│   ├── install_hook.go  # `gitai hook install`: writes both hooks (prepare-commit-msg + pre-push)
+│   ├── hook_toggle.go   # Per-repo feature toggles (`commit-msg`/`push-check` enable|disable)
+│   └── push_check.go    # `-pre-push` mode: ref parsing, option loading, step report
+├── client/              # HTTP client for OpenAI-compatible APIs
+│   ├── client.go        # Client struct (api_base, api_key, model, http client)
+│   ├── api_call.go      # API call logic, thinking + reasoning mode, auto-fallback
+│   └── reasoning.go     # Muse Glimmer: model matching + strength injection
+├── commands/            # Feature handlers (commit, review, pullreq, hook)
+│   ├── handler.go       # Handler interface (Name + Diff + Run)
+│   ├── commit.go        # Commit message generation
+│   ├── review.go        # Code review generation
+│   ├── pullreq.go       # PR description generation
+│   └── hook.go          # Hook mode: commit pipeline + staged diff (no side effects)
+├── config/              # Config loading (~/.gitai/gitai.json + env overrides)
+│   └── config.go        # Load() with validation
+├── git/                 # Git plumbing
+│   ├── git.go           # Diff sources: StagedDiff, CommitAllDiff, BranchDiff
+│   ├── sanitize.go      # SanitizeCommitMessage: control-char strip, length cap
+│   └── push_files.go    # PushFiles: which files a push changes (diff / merge-base / deletions)
+├── pipeline/            # The pre-push check pipeline (push-checks)
+│   ├── detect.go        # Language detection by file extension (go, python, node, shell, html, yaml)
+│   ├── tools.go         # Default formatter + linter per language, FailOnOut semantics
+│   └── run.go           # Step runner (spinner + timeout), threshold blocking, affected-file counting
+├── diffprep/            # Diff filtering, stats, and chunking before the LLM call
+│   └── preprocess.go    # Noise filtering, truncation, hierarchical chunking
+├── prompts/             # System prompts
+│   ├── loader.go        # Loads custom prompts from disk, falls back to defaults
+│   ├── commit.go        # Default commit system prompt
+│   ├── review.go        # Default review system prompt
+│   └── pullreq.go       # Default pullreq system prompt
+├── spinner/             # Purple braille-dot loading spinner shown while the AI runs
+│   └── spinner.go       # Start/Stop/Note; TTY-aware, writes to stderr only
+└── install.sh           # Automated install: clone, build, install to /usr/local/bin
 ```
 
-### Key Features
+Adding a new feature = one `commands/<feature>.go` file (implement `Name`, `Diff`, `Run`),
+one default prompt in `prompts/`, and one flag in `cmd/main.go`.
 
-- **Streaming-first**: Uses SSE streaming with automatic fallback to non-streaming for APIs that don't support it
-- **Thinking mode**: Supports extended reasoning via `chat_template_kwargs`, with auto-fallback on failure
-- **Diff preprocessing**: Filters noise files (lock files, binaries, generated code), truncates oversized diffs, computes per-file stats
-- **Hierarchical chunking**: Splits large diffs into manageable chunks for models with context limits
-- **Per-task configuration**: Different models and settings per command (commit, review, pullreq)
-- **Hot-reload prompts**: Custom prompts picked up without rebuild
+## Design notes (scalability)
 
----
+The package graph is layered and acyclic — nothing imports "upward":
+
+```
+cmd  →  commands  →  client / diffprep / git / prompts  →  spinner, config
+```
+
+- **New AI feature** = handler in `commands/` + default prompt in `prompts/`
+  + one flag (see [docs/extending.md](docs/extending.md)).
+- **New hook feature** = per-repo marker in `<git-dir>/gitai/` + hook script
+  + a mode function; the toggle plumbing (`isFeatureOn`, marker helpers in
+  `cmd/hook_toggle.go`) is name-parameterized, so a third feature adds no
+  shared code.
+- **Watch points (no action needed yet):** `cmd/` accumulates the shared
+  hook plumbing (marker paths, script writing, `.bak` backups) — at a third
+  hook feature, extract that into a `hook/` package. `loadPushCheckOptions`
+  reads the `pushchecks` config block by string keys — worth a typed struct
+  if per-language tool config grows.
 
 ## License
 

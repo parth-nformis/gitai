@@ -19,9 +19,14 @@ import (
 //
 //   - "commit" → DefaultCommitSystem()
 //   - "review" → DefaultReviewSystem()
+//   - "pullreq" → DefaultPullReqSystem()
 //   - anything else → empty string
 //
-// This gives users hot-reload: edit the .md file, next run picks it up.
+// Why read from disk on every run instead of embedding only: it gives
+// users hot-reload — tweak the .md file and the next `gitai` invocation
+// picks it up, no rebuild or re-install. The prompt is the single
+// biggest lever for output quality, so making it editable without
+// recompiling is a core feature, not a convenience.
 func LoadSystemPrompt(taskName, configDir string) string {
 	promptPath := filepath.Join(configDir, "system_prompts", taskName+".md")
 

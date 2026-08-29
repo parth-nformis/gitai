@@ -13,7 +13,14 @@ import (
 // Each feature (commit, review, etc.) implements this interface.
 type Handler interface {
 	// Name returns the command name (e.g. "commit", "review").
+	// It doubles as the key for per-task config (<task>.model,
+	// <task>.thinking) and system prompt overrides (<task>.md).
 	Name() string
+
+	// Diff returns the git diff this feature operates on. Each handler
+	// declares its own diff source (staged-only, stage-all, branch diff),
+	// so callers never have to guess which diff a handler needs.
+	Diff(ctx context.Context) (string, error)
 
 	// Run executes the feature's workflow.
 	//
@@ -22,8 +29,9 @@ type Handler interface {
 	//   - diff:      the staged git diff to analyze
 	//   - model:     which model to use for this call (may override client.Model)
 	//   - thinking:  whether to enable extended thinking mode
+	//   - reasoning: Muse Glimmer reasoning strength (low|medium|high|xhigh); empty means default
 	//   - configDir: path to ~/.gitai (used to find system prompt files)
 	//
 	// Returns the AI's response text and any error.
-	Run(ctx context.Context, cli *client.Client, diff string, model string, thinking bool, configDir string) (string, error)
+	Run(ctx context.Context, cli *client.Client, diff string, model string, thinking bool, reasoning string, configDir string) (string, error)
 }

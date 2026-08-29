@@ -1,7 +1,13 @@
 package prompts
 
-// DefaultReviewSystem returns the built-in default system prompt for code review.
-// Used as a fallback when no custom prompt file exists.
+// DefaultReviewSystem returns the built-in default system prompt for
+// code review. Used as a fallback when no custom prompt file exists.
+//
+// The prompt fixes the output shape (REVIEW: ACCEPTED/REJECTED, then
+// SECURITY / QUALITY / BEST PRACTICES / SUMMARY sections) so that
+// reviews are consistent run-to-run and easy to skim — and so the
+// verdict line could be parsed by a CI integration later without
+// guessing where it landed in free-form text.
 func DefaultReviewSystem() string {
 	return `You are a senior security-focused code reviewer. Analyze the provided git diff and perform a comprehensive review covering three areas:
 
