@@ -85,9 +85,16 @@ today even though no caller uses it yet.
   `.git/`, not git config.
 - Never blocks a commit: any error (no API, no model, no staged
   changes) → exit 0, git proceeds normally.
-- Never overwrites: only fills a message file that holds no real
-  (non-comment) content, from an empty source. Git's own default `#`
-  comment block does not count as content.
+- Preserves the editor: the AI message is **prepended** above whatever git
+  pre-filled (its default `#` comment block), never replacing it. The hook
+  only acts on a message file that holds no real (non-comment) content, from
+  an empty source. Git's own default `#` comment block does not count as
+  content.
+- Errors stay visible but out of the commit: on any generation/config
+  failure the hook prepends a single `# gitai hook: ...` comment line to the
+  top of the file (above git's block). It shows up in the editor so the user
+  sees *why* the message is empty, but as a `#` line it is stripped from the
+  actual commit. The commit is still never blocked.
 - User always sees the message in their editor before it is committed.
 
 ## Implementation (as built)
@@ -95,7 +102,7 @@ today even though no caller uses it yet.
 | Piece | Where | Notes |
 |---|---|---|
 | `gitai hook install` | `cmd/install_hook.go` | Resolves the git dir via `git rev-parse --git-dir` (works from subdirs); embeds the **absolute** gitai path (`os.Executable`) in the script so it survives `$PATH` changes; backs up an existing hook to `.bak` (a pre-existing `.bak` is **kept**, never clobbered — it may hold a hand-written hook); `chmod 0755`; warns when `core.hooksPath` is set, since that shadows `.git/hooks`. Handled before `config.Load` in `main` — installing needs no API. |
-| `gitai -commit-msg-file <file>` | `commands/hook.go` + `cmd/main.go` | `Hook` embeds `Commit` and overrides only `Diff` → `git.StagedDiff`. `Run` (prompt, `diffprep`, generate) is promoted from `Commit` unchanged. `main` writes `git.SanitizeCommitMessage(result)` into `<file>` and exits 0 on every path — error, success, or clean tree. Dispatch checks `-commit-msg-file` before the task flags, so it can never fall back to `Commit` (whose `git add -A` would run mid-commit); config-load errors and invalid `reasoning` values also resolve to exit 0 (the value is dropped, generation proceeds). |
+| `gitai -commit-msg-file <file>` | `commands/hook.go` + `cmd/main.go` | `Hook` embeds `Commit` and overrides only `Diff` → `git.StagedDiff`. `Run` (prompt, `diffprep`, generate) is promoted from `Commit` unchanged. `main` **prepends** `git.SanitizeCommitMessage(result)` above the file's existing content (git's default comment block) and exits 0 on every path. On a generation/config error it instead prepends a `# gitai hook: ...` comment line (via `writeHookNote`), so the failure is visible in the editor but stripped from the commit. Dispatch checks `-commit-msg-file` before the task flags, so it can never fall back to `Commit` (whose `git add -A` would run mid-commit); config-load errors and invalid `reasoning` values also resolve to exit 0 (the value is dropped, generation proceeds). |
 | Per-repo toggle | `cmd/hook_toggle.go` + `cmd/main.go` | `gitai commit-msg enable`/`disable` write or remove `<git-dir>/gitai/commitmsg` via the shared `gitDirPath()` helper (presence = ON; both are idempotent and error outside a repo). The `-commit-msg-file` path exits 0 before generating when the marker is absent, so an un-opted-in repo never reaches the API. Default is OFF; `gitai hook install` tells the user how to opt in. Tests: `cmd/hook_toggle_test.go`. |
 | Config | `hook.*` keys | `Name()=="hook"` makes the generic per-task resolution in `main` treat it like any other task (`hook.model`, `hook.thinking`, `hook.reasoning`), falling back to the global model. |
 | Tests | `cmd/install_hook_test.go`, `commands/hook_test.go` | Script guards + resolved path are asserted; `TestHookScriptBailGuards` executes the actual script (fake gitai) against comment-only, empty, real-content, and source-set files; `Hook` is checked to satisfy `Handler` (compile-time) and to report `Name()=="hook"`. |

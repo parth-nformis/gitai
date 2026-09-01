@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/parthdande/gitai/client"
@@ -134,6 +135,7 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 			// Hook mode must never block a commit: report and exit 0 so
 			// git opens the (empty) message file and the user writes one.
 			fmt.Fprintf(os.Stderr, "gitai hook: %v\n", err)
+			writeHookNote(*hookFile, err.Error())
 			os.Exit(0)
 		}
 		fmt.Printf("ERROR: %v\n", err)
@@ -229,6 +231,7 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 			// Hook mode must never block a commit: report and exit 0 so
 			// git opens the (empty) message file and the user writes one.
 			fmt.Fprintf(os.Stderr, "gitai hook: %v\n", err)
+			writeHookNote(*hookFile, err.Error())
 			os.Exit(0)
 		}
 		fmt.Printf("Error: %v\n", err)
@@ -236,11 +239,15 @@ System prompts: ~/.gitai/system_prompts/<command>.md
 	}
 
 	if *hookFile != "" {
-		// Hook mode: write the message straight into the file git will
-		// open in the editor. No banner, no auto-commit — the user sees
-		// and approves the message in their own editor.
+		// Hook mode: write the message into the file git will open in the
+		// editor. Prepend it above whatever git pre-filled (its default
+		// "# ..." comment block) instead of clobbering the file, so the
+		// user keeps git's standard editor context. No banner, no
+		// auto-commit — the user sees and approves the message in their
+		// own editor.
 		sanitized := git.SanitizeCommitMessage(result)
-		if err := os.WriteFile(*hookFile, []byte(sanitized+"\n"), 0o644); err != nil {
+		existing, _ := os.ReadFile(*hookFile)
+		if err := os.WriteFile(*hookFile, []byte(sanitized+"\n\n"+string(existing)), 0o644); err != nil {
 			fmt.Fprintf(os.Stderr, "gitai hook: could not write message file: %v\n", err)
 			os.Exit(0)
 		}
@@ -306,4 +313,16 @@ func labelFor(h commands.Handler, model string) string {
 		verb = "Drafting PR description"
 	}
 	return fmt.Sprintf("%s (%s)", verb, model)
+}
+
+// writeHookNote prepends a "# gitai hook: ..." line to the commit message
+// file so a generation failure is visible in the editor git opens — not just
+// on the scrolling terminal. It is a git comment, so it is stripped from the
+// actual commit and can never become part of the message. Best-effort: any
+// read/write failure is ignored, and the caller still exits 0 so the commit
+// is never blocked.
+func writeHookNote(file, reason string) {
+	existing, _ := os.ReadFile(file)
+	note := "# gitai hook: " + strings.ReplaceAll(reason, "\n", " ") + "\n"
+	_ = os.WriteFile(file, []byte(note+string(existing)), 0o644)
 }
