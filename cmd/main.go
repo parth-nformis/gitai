@@ -19,7 +19,7 @@ import (
 const (
 	// Version is the release version of gitai. Bump manually when
 	// releasing: MAJOR.MINOR.PATCH.
-	Version = "0.1.0"
+	Version = "0.1.1"
 
 	// gitTimeout bounds the whole run (diff fetch + every API call).
 	// Hierarchical summarization makes multiple calls for large diffs
