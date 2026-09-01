@@ -40,7 +40,9 @@ func TestHookScriptBailGuards(t *testing.T) {
 	dir := t.TempDir()
 	// Fake gitai: when invoked as "gitai -commit-msg-file <file>", write a marker.
 	fakeBin := filepath.Join(dir, "gitai")
-	if err := os.WriteFile(fakeBin, []byte("#!/bin/sh\n[ \"$1\" = \"-commit-msg-file\" ] && { printf 'generated message\\n' > \"$2\"; exit 0; }\nexit 0\n"), 0o755); err != nil {
+	// Fake gitai mirrors the real prepend behavior: write the generated
+	// message above whatever the file already holds (git's comment block).
+	if err := os.WriteFile(fakeBin, []byte("#!/bin/sh\nif [ \"$1\" = \"-commit-msg-file\" ]; then\n  existing=\"$(cat \"$2\" 2>/dev/null)\"\n  printf 'generated message\\n\\n%s\\n' \"$existing\" > \"$2\"\n  exit 0\nfi\nexit 0\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	hookPath := filepath.Join(dir, "prepare-commit-msg")
@@ -63,14 +65,18 @@ func TestHookScriptBailGuards(t *testing.T) {
 		return string(data)
 	}
 
-	// git pre-fills the file with its default comment block -> generate.
+	// git pre-fills the file with its default comment block -> generate,
+	// with our message above git's preserved comment block.
 	got := run("# Please enter the commit message for your changes.\n# On branch main\n# (initial commit)\n", "")
-	if got != "generated message\n" {
-		t.Errorf("comment-only file: want generated message, got %q", got)
+	if !strings.Contains(got, "generated message") {
+		t.Errorf("comment-only file: want generated message present, got %q", got)
+	}
+	if !strings.Contains(got, "# On branch main") {
+		t.Errorf("comment-only file: git's comment block must be preserved, got %q", got)
 	}
 
 	// An empty file (older git / direct invocation) -> generate.
-	if got := run("", ""); got != "generated message\n" {
+	if got := run("", ""); !strings.Contains(got, "generated message") {
 		t.Errorf("empty file: want generated message, got %q", got)
 	}
 
