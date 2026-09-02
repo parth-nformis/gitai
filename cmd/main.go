@@ -16,11 +16,13 @@ import (
 	"github.com/parthdande/gitai/spinner"
 )
 
-const (
-	// Version is the release version of gitai. Bump manually when
-	// releasing: MAJOR.MINOR.PATCH.
-	Version = "0.1.1"
+// Version is the release version, injected at build time from the repo's
+// `version` file: -ldflags "-X main.Version=$(cat version)". The literal
+// here is only a fallback for builds that skip the flag (a plain
+// `go build` from an editor).
+var Version = "0.1.2"
 
+const (
 	// gitTimeout bounds the whole run (diff fetch + every API call).
 	// Hierarchical summarization makes multiple calls for large diffs
 	// and local models can be slow, so this needs real headroom.
