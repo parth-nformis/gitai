@@ -25,9 +25,13 @@ git clone -q --depth 1 https://github.com/parthdande/gitai.git "$TEMP_BUILD_DIR"
 # package rather than main.go alone: cmd/ is multi-file, and a
 # file-mode build compiles only that one file, leaving every function
 # in a sibling file undefined so the build fails.
+#
+# Inject the release version from the repo's `version` file so the
+# installed binary reports the version that was just cloned.
 (
     cd "$TEMP_BUILD_DIR"
-    go build -o gitai ./cmd
+    VERSION="$(cat version 2>/dev/null || echo 0.1.2)"
+    go build -ldflags "-X main.Version=$VERSION" -o gitai ./cmd
 )
 
 # Install destination: per-user, so no sudo is needed and `gitai
